@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - feature/capacitor-android
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
