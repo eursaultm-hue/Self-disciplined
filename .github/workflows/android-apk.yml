@@ -1,5 +1,7 @@
 name: Build Android APK
 
+# Pushes to the packaging branch intentionally trigger a real APK build.
+
 on:
   workflow_dispatch:
   push:
