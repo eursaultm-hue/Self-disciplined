@@ -15,7 +15,7 @@ const blankStore: Store = {
 
 type PersistedStore = Store & { schemaVersion?: number };
 
-function migrate(raw: unknown): Store {
+export function migrate(raw: unknown): Store {
   if (!raw || typeof raw !== "object") return blankStore;
   const source = raw as PersistedStore;
   const migrated: PersistedStore = {
@@ -46,4 +46,22 @@ export function loadStore(): Store {
 export function saveStore(store: Store): void {
   const persisted: PersistedStore = { ...store, schemaVersion: CURRENT_SCHEMA_VERSION };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
+}
+
+export function exportStore(store: Store): string {
+  return JSON.stringify(
+    {
+      app: "personal-learning-os",
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      data: store
+    },
+    null,
+    2
+  );
+}
+
+export function importStore(text: string): Store {
+  const parsed = JSON.parse(text) as { data?: unknown };
+  return migrate(parsed?.data ?? parsed);
 }
