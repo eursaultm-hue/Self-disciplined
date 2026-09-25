@@ -1,14 +1,15 @@
 "use client";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Course, DailyReview, Goal, PriorityTier, Store, Task, TaskStatus, id, today } from "../lib/domain";
 import { generateDailyPlan } from "../lib/planner";
-import { loadStore, saveStore } from "../lib/storage";
+import { exportStore, importStore, loadStore, saveStore } from "../lib/storage";
 
 const blank: Store = { goals: [], courses: [], tasks: [], sessions: [], reviews: [], schedule: [], availability: {} };
 const labels: Record<TaskStatus, string> = { TODO: "待开始", IN_PROGRESS: "进行中", DONE: "已完成", OVERDUE: "已逾期", SKIPPED: "已跳过", BLOCKED: "受阻", CANCELLED: "已取消" };
 export default function Home() {
   const [store, setStore] = useState<Store>(blank); const [ready, setReady] = useState(false); const [date, setDate] = useState(today());
   const [view, setView] = useState<"today" | "goals" | "courses" | "schedule" | "tasks" | "review">("today");
+  const fileInput = useRef<HTMLInputElement>(null);
   useEffect(() => { setStore(loadStore()); setReady(true); }, []);
   useEffect(() => { if (ready) saveStore(store); }, [store, ready]);
   const available = store.availability[date] ?? 120;
@@ -23,9 +24,29 @@ export default function Home() {
     if (status === "BLOCKED" && !blockedReason) return;
     update(s => ({ ...s, tasks: s.tasks.map(t => t.id === task.id ? { ...t, status, blockedReason } : t) }));
   };
+  const backup = () => {
+    const blob = new Blob([exportStore(store)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `learning-os-backup-${date}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  const restore = async (file: File) => {
+    try {
+      const next = importStore(await file.text());
+      setStore(next);
+      window.alert("学习数据已恢复。");
+    } catch {
+      window.alert("备份文件无效，未修改当前数据。");
+    } finally {
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  };
   const saveReview = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = new FormData(e.currentTarget); const review: DailyReview = { date, wins: String(f.get("wins")), blockers: String(f.get("blockers")), reflection: String(f.get("reflection")), tomorrowAdjustment: String(f.get("adjustment")), energyLevel: Number(f.get("energy")) }; update(s => ({ ...s, reviews: [...s.reviews.filter(r => r.date !== date), review] })); };
   if (!ready) return <main className="shell">正在加载学习系统…</main>;
-  return <main className="shell"><header><div><p className="eyebrow">PERSONAL LEARNING OS · V0.1.1</p><h1>把今天学好。</h1><p className="sub">目标 → 计划 → 执行 → 记录 → 复盘 → 调整</p></div><nav>{([['today','今日'],['goals','目标'],['courses','课程'],['schedule','课表'],['tasks','任务'],['review','复盘']] as const).map(([v, n]) => <button key={v} className={view === v ? "active" : ""} onClick={() => setView(v)}>{n}</button>)}</nav></header>
+  return <main className="shell"><header><div><p className="eyebrow">PERSONAL LEARNING OS · V0.1.1</p><h1>把今天学好。</h1><p className="sub">目标 → 计划 → 执行 → 记录 → 复盘 → 调整</p></div><nav>{([['today','今日'],['goals','目标'],['courses','课程'],['schedule','课表'],['tasks','任务'],['review','复盘']] as const).map(([v, n]) => <button key={v} className={view === v ? "active" : ""} onClick={() => setView(v)}>{n}</button>)}</nav><div className="data-actions"><button onClick={backup}>备份数据</button><button onClick={() => fileInput.current?.click()}>恢复数据</button><input ref={fileInput} type="file" accept=".json,application/json" hidden onChange={e => { const file = e.target.files?.[0]; if (file) void restore(file); }} /></div></header>
   {view === "today" && <section><div className="datebar"><label>计划日期 <input type="date" value={date} onChange={e => setDate(e.target.value)} /></label><label>可用分钟 <input type="number" min="0" value={available} onChange={e => update(s => ({ ...s, availability: { ...s.availability, [date]: Math.max(0, Number(e.target.value) || 0) } }))} /></label></div><div className="stats"><Stat label="可用时间" value={`${available} 分钟`} /><Stat label="固定课程" value={`${plan.scheduledMinutes} 分钟`} /><Stat label="已安排" value={`${plannedMinutes} 分钟`} /><Stat label="剩余容量" value={`${plan.remainingMinutes} 分钟`} /></div><h2>今日计划</h2>{plan.items.length ? <div className="plan">{(["MUST", "SHOULD", "COULD"] as PriorityTier[]).map(tier => <div key={tier}><h3 className={`tier ${tier.toLowerCase()}`}>{tier}</h3>{plan.items.filter(x => x.priorityTier === tier).map(task => <article className="task" key={task.id}><div><strong>{task.title}</strong><small>{task.plannedMinutes} 分钟 · {task.selectionReason}</small></div><div className="actions"><select value={task.status} onChange={e => setStatus(task, e.target.value as TaskStatus)}>{Object.entries(labels).map(([v, n]) => <option key={v} value={v}>{n}</option>)}</select><button onClick={() => { const recordedAt = new Date().toISOString(); update(s => ({...s, sessions: [...s.sessions, { id:id(), taskId:task.id, courseId:task.courseId, startedAt:recordedAt, endedAt:recordedAt, actualMinutes:25, note:"专注学习" }], tasks:s.tasks.map(t => t.id===task.id ? {...t, status:"IN_PROGRESS", actualMinutes:t.actualMinutes+25} : t)})); }}>记录 25 分钟</button></div></article>)}</div>)}</div> : <Empty text="还没有可安排任务。请先添加目标、课程或任务。" />}</section>}
   {view === "goals" && <section className="two"><div><h2>长期目标</h2>{store.goals.map(g => <article className="card" key={g.id}><strong>{g.title}</strong><small>优先级 {g.priority} · 目标日期 {g.targetDate || "未设置"}</small></article>)} {!store.goals.length && <Empty text="从一个清晰、长期的学习目标开始。" />}</div><form className="card form" onSubmit={addGoal}><h3>新建目标</h3><input name="title" placeholder="例如：通过雅思 7 分" required/><label>优先级 <input name="priority" type="number" min="1" max="5" defaultValue="3" /></label><label>目标日期 <input name="targetDate" type="date" /></label><button>保存目标</button></form></section>}
   {view === "courses" && <section className="two"><div><h2>课程</h2>{store.courses.map(c => <article className="card" key={c.id}><strong>{c.title}</strong><small>每周目标 {c.weeklyTargetMinutes} 分钟 · 优先级 {c.priority}</small></article>)} {!store.courses.length && <Empty text="课程可关联到长期目标，并提供每周学习时长目标。" />}</div><form className="card form" onSubmit={addCourse}><h3>新建课程</h3><input name="title" placeholder="例如：法语 A2" required/><select name="goalId"><option value="">不关联目标</option>{store.goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}</select><label>优先级 <input name="priority" type="number" min="1" max="5" defaultValue="3" /></label><label>每周分钟 <input name="minutes" type="number" min="1" defaultValue="180" /></label><button>保存课程</button></form></section>}
