@@ -8,6 +8,7 @@ on:
     branches:
       - feature/ai-steward-v03
       - main
+      - feature/ai-agent-v04
   pull_request:
     branches:
       - main
