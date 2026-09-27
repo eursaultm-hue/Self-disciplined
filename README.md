@@ -53,6 +53,10 @@ Steward 不再直接修改数据，而是产生明确的 `StewardAction[]`：
 
 `现实信息 → AI 理解 → Action → 计划 → 主动提醒 → 执行 → 记录 → 复盘 → 自适应调整`
 
+## 构建
+
+V0.3 的 Android Debug APK 由 GitHub Actions 自动构建。
+
 ## 运行
 
 ```bash
