@@ -58,6 +58,16 @@ jobs:
           p = Path("app/build.gradle")
           s = p.read_text()
           s = s.replace("versionCode 1", "versionCode 5").replace('versionName "1.0"', 'versionName "0.5.0"')
+          if "signingConfigs {" not in s:
+            s = s.replace("    buildTypes {", """    signingConfigs {
+        release {
+            storeFile file("release.keystore")
+            storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            keyAlias System.getenv("ANDROID_KEY_ALIAS")
+            keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+        }
+    }
+    buildTypes {""")
           p.write_text(s)
           PY
 
