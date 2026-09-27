@@ -3,10 +3,10 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Course, DailyReview, Goal, PriorityTier, Store, Task, TaskStatus, id, today } from "../lib/domain";
 import { generateDailyPlan } from "../lib/planner";
-import { buildMorningBrief, stewardReply, StewardMemory, StewardMessage } from "../lib/steward";
+import { buildMorningBrief, stewardReply, StewardAction, StewardMemory, StewardMessage } from "../lib/steward";
 
-const key = "personal-learning-os-v02";
-const legacyKey = "personal-learning-os-v01";
+const key = "personal-learning-os-v03";
+const legacyKeys = ["personal-learning-os-v02", "personal-learning-os-v01"];
 const blank: Store = { goals: [], courses: [], tasks: [], sessions: [], reviews: [], schedule: [], availability: {} };
 const labels: Record<TaskStatus, string> = { TODO: "待开始", IN_PROGRESS: "进行中", DONE: "已完成", OVERDUE: "已逾期", SKIPPED: "已跳过", BLOCKED: "受阻", CANCELLED: "已取消" };
 
@@ -14,13 +14,16 @@ function load(): Store {
   try {
     const current = localStorage.getItem(key);
     if (current) return JSON.parse(current);
-    const legacy = localStorage.getItem(legacyKey);
-    return legacy ? JSON.parse(legacy) : blank;
+    for (const legacyKey of legacyKeys) {
+      const legacy = localStorage.getItem(legacyKey);
+      if (legacy) return JSON.parse(legacy);
+    }
+    return blank;
   } catch { return blank; }
 }
 
 function loadMessages(): StewardMessage[] {
-  try { return JSON.parse(localStorage.getItem("personal-learning-os-v02-chat") || "[]"); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem("personal-learning-os-v03-chat") || "[]"); } catch { return []; }
 }
 
 export default function Home() {
@@ -36,15 +39,15 @@ export default function Home() {
   useEffect(() => {
     setStore(load());
     setMessages(loadMessages());
-    try { setMemory(JSON.parse(localStorage.getItem("personal-learning-os-v02-memory") || "null") || { summary: "", updatedAt: new Date().toISOString() }); } catch {}
+    try { setMemory(JSON.parse(localStorage.getItem("personal-learning-os-v03-memory") || "null") || { summary: "", updatedAt: new Date().toISOString() }); } catch {}
     setReady(true);
   }, []);
 
   useEffect(() => {
     if (!ready) return;
     localStorage.setItem(key, JSON.stringify(store));
-    localStorage.setItem("personal-learning-os-v02-chat", JSON.stringify(messages.slice(-80)));
-    localStorage.setItem("personal-learning-os-v02-memory", JSON.stringify(memory));
+    localStorage.setItem("personal-learning-os-v03-chat", JSON.stringify(messages.slice(-80)));
+    localStorage.setItem("personal-learning-os-v03-memory", JSON.stringify(memory));
   }, [store, messages, memory, ready]);
 
   const available = store.availability[date] ?? 120;
@@ -58,17 +61,7 @@ export default function Home() {
     if (!input) return;
     const userMessage: StewardMessage = { role: "user", content: input, at: new Date().toISOString() };
     const decision = stewardReply(input, store, memory);
-    update(s => {
-      let next = s;
-      if (decision.taskUpdates?.length) {
-        next = { ...next, tasks: next.tasks.map(t => {
-          const change = decision.taskUpdates?.find(x => x.taskId === t.id);
-          return change ? { ...t, status: change.status ?? t.status, actualMinutes: t.actualMinutes + (change.addMinutes ?? 0) } : t;
-        }) };
-      }
-      if (decision.newTask) next = { ...next, tasks: [...next.tasks, { ...decision.newTask, id: id(), status: "TODO", actualMinutes: 0 }] };
-      return next;
-    });
+    update(s => applyStewardActions(s, decision.actions));
     setMessages(prev => [...prev, userMessage, { role: "steward", content: decision.reply, at: new Date().toISOString() }]);
     setMemory(decision.memory);
     setChat("");
@@ -95,7 +88,7 @@ export default function Home() {
   return <main className="shell">
     <header className="topbar">
       <div>
-        <p className="eyebrow">PERSONAL LEARNING OS · V0.2</p>
+        <p className="eyebrow">PERSONAL LEARNING OS · V0.3</p>
         <h1>自律 <span>AI 管家</span></h1>
         <p className="sub">你负责告诉我现实发生了什么，我负责把它变成可执行的下一步。</p>
       </div>
@@ -155,6 +148,31 @@ export default function Home() {
     {view === "data" && <DataView store={store} update={update} date={date} />}
     {view === "review" && <ReviewView date={date} plannedMinutes={plannedMinutes} actualToday={actualToday} store={store} update={update} />}
   </main>;
+}
+
+function applyStewardActions(store: Store, actions: StewardAction[]): Store {
+  let next = store;
+  for (const action of actions) {
+    if (action.type === "SET_AVAILABILITY") {
+      next = { ...next, availability: { ...next.availability, [action.date]: Math.max(0, action.minutes) } };
+    } else if (action.type === "UPDATE_TASK") {
+      next = {
+        ...next,
+        tasks: next.tasks.map(t => t.id === action.taskId ? {
+          ...t,
+          status: action.status ?? t.status,
+          plannedMinutes: action.plannedMinutes ?? t.plannedMinutes,
+          plannedDate: action.plannedDate ?? t.plannedDate,
+        } : t),
+      };
+    } else if (action.type === "CREATE_TASK") {
+      next = {
+        ...next,
+        tasks: [...next.tasks, { ...action.task, id: id(), status: "TODO", actualMinutes: 0 }],
+      };
+    }
+  }
+  return next;
 }
 
 function TaskCard({ task, record25 }: { task: Task & { selectionReason?: string }; record25: (task: Task) => void }) {
