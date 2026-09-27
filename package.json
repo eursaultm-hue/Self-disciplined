@@ -1,6 +1,6 @@
 {
   "name": "personal-learning-os",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -17,7 +17,8 @@
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@capacitor/local-notifications": "^8.3.1"
+    "@capacitor/local-notifications": "^8.3.1",
+    "pdfjs-dist": "^6.3.289"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",

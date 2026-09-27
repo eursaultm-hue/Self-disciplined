@@ -1,10 +1,11 @@
 {
-  "version": "0.5.0",
-  "versionCode": 5,
+  "version": "0.6.0",
+  "versionCode": 6,
   "downloadUrl": "https://github.com/eursaultm-hue/Self-disciplined/releases/latest",
   "notes": [
-    "V0.5 主动监督",
-    "Android 原生通知",
-    "应用内更新检查"
+    "V0.6 课程知识库",
+    "PDF 本地文字提取",
+    "主动监督原生通知测试",
+    "应用内更新检查入口"
   ]
 }

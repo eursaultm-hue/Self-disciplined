@@ -8,7 +8,7 @@ on:
     branches:
       - feature/ai-steward-v03
       - main
-      - feature/ai-agent-v04
+      - feature/ai-agent-v04\n      - feature/ai-learning-os-v06
   pull_request:
     branches:
       - main
@@ -59,7 +59,7 @@ jobs:
           from pathlib import Path
           p = Path("app/build.gradle")
           s = p.read_text()
-          s = s.replace("versionCode 1", "versionCode 5").replace('versionName "1.0"', 'versionName "0.5.0"')
+          s = s.replace("versionCode 1", "versionCode 6").replace('versionName "1.0"', 'versionName "0.6.0"')
           p.write_text(s)
           PY
 
@@ -69,10 +69,10 @@ jobs:
 
       - name: Prepare APK artifact
         working-directory: android
-        run: cp app/build/outputs/apk/debug/app-debug.apk ../self-disciplined-v0.5.0.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk ../self-disciplined-v0.6.0.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: self-disciplined-apk-v0.5.0
+          name: self-disciplined-apk-v0.6.0
           path: self-disciplined-v0.5.0.apk

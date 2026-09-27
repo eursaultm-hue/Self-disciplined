@@ -8,8 +8,8 @@ import { askGateway, defaultGatewayConfig, GatewayConfig } from "../lib/gateway"
 import { defaultSupervisorSettings, enableSupervisor, SupervisorSettings } from "../lib/supervisor";
 import { APP_VERSION, checkForUpdate, UpdateManifest } from "../lib/update";
 
-const key = "personal-learning-os-v05";
-const legacyKeys = ["personal-learning-os-v04", "personal-learning-os-v03", "personal-learning-os-v02", "personal-learning-os-v01"];
+const key = "personal-learning-os-v06";
+const legacyKeys = ["personal-learning-os-v05", "personal-learning-os-v04", "personal-learning-os-v03", "personal-learning-os-v02", "personal-learning-os-v01"];
 const blank: Store = { goals: [], courses: [], tasks: [], sessions: [], reviews: [], schedule: [], availability: {} };
 const labels: Record<TaskStatus, string> = { TODO: "待开始", IN_PROGRESS: "进行中", DONE: "已完成", OVERDUE: "已逾期", SKIPPED: "已跳过", BLOCKED: "受阻", CANCELLED: "已取消" };
 
@@ -109,7 +109,7 @@ export default function Home() {
   return <main className="shell">
     <header className="topbar">
       <div>
-        <p className="eyebrow">PERSONAL LEARNING OS · V0.5</p>
+        <p className="eyebrow">PERSONAL LEARNING OS · V0.6</p>
         <h1>自律 <span>AI 管家</span></h1>
         <p className="sub">你负责告诉我现实发生了什么，我负责把它变成可执行的下一步。</p>
       </div>
@@ -164,9 +164,9 @@ export default function Home() {
         <div className="card permission-card">
           <p className="eyebrow">权限中心</p><h3>让我多替你做一点</h3>
           <p>通知权限开启后，我可以开始承担主动提醒。日历、文件、屏幕使用情况等权限会在后续版本逐步接入。</p>
-          <button onClick={requestNotification}>{notificationEnabled ? "✓ 通知已开启" : "开启通知权限"}</button>
+          <button onClick={requestNotification}>{notificationEnabled ? "✓ 通知已开启" : "开启通知权限"}</button><button className="ghost" onClick={async () => { const ok = await enableSupervisor(supervisor, true); setNotificationEnabled(ok); }}>发送测试通知</button>
         </div>
-        <div className="card mini-card"><small>今日容量</small><strong>{available} 分钟</strong><span>已安排 {plannedMinutes} 分钟</span></div>
+        <div className="card permission-card"><p className="eyebrow">V0.6 · 课程知识库</p><h3>PDF → 课程结构 → 知识点</h3><p>把数学分析、线代、电子学等课程 PDF 导入设备本地，先提取原文和结构，再逐步接入 Gateway 做知识点整理。</p><button onClick={() => { window.location.href = "/course"; }}>打开课程知识库</button></div>\n        <div className="card permission-card"><p className="eyebrow">应用更新</p><h3>当前版本 V0.6.0</h3><p>{updateChecking ? "正在检查…" : updateInfo ? `发现新版本 ${updateInfo.version}` : "当前已是最新版本，或暂时没有可用更新。"}</p><button onClick={async () => { setUpdateChecking(true); setUpdateInfo(await checkForUpdate()); setUpdateChecking(false); }}>检查更新</button>{updateInfo && <button className="ghost" onClick={() => { window.location.href = updateInfo.downloadUrl; }}>前往更新</button>}<small>更新通道已接入，但真正的一键覆盖安装还需要稳定 APK 下载地址和持久签名。</small></div>\n        <div className="card mini-card"><small>今日容量</small><strong>{available} 分钟</strong><span>已安排 {plannedMinutes} 分钟</span></div>
         <div className="card mini-card"><small>最近记忆</small><p>{memory.summary || "还没有。你说的第一句话就会成为系统的一部分。"}</p></div>
         <div className="card principle"><small>核心原则</small><strong>用户输入越少，AI 完成的管理越多。</strong></div>
       </aside>

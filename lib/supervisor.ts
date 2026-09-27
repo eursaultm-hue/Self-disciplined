@@ -6,10 +6,21 @@ export const defaultSupervisorSettings: SupervisorSettings = { enabled: true, qu
 function inQuietHours(hour: number, settings: SupervisorSettings) {
   return settings.quietStart > settings.quietEnd ? hour >= settings.quietStart || hour < settings.quietEnd : hour >= settings.quietStart && hour < settings.quietEnd;
 }
-export async function enableSupervisor(settings: SupervisorSettings) {
+export async function enableSupervisor(settings: SupervisorSettings, testOnly = false) {
   const permission = await LocalNotifications.requestPermissions();
   if (permission.display !== "granted") return false;
-  await LocalNotifications.cancel({ notifications: [{ id: 5001 }, { id: 5002 }, { id: 5003 }] });
+  await LocalNotifications.cancel({ notifications: [{ id: 5001 }, { id: 5002 }, { id: 5003 }, { id: 5099 }] });
+  if (testOnly) {
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: 5099,
+        title: "自律 AI 管家",
+        body: "原生通知测试成功。以后我会在你需要的时候提醒，而不是疯狂轰炸。",
+        schedule: { at: new Date(Date.now() + 5000) }
+      }]
+    });
+    return true;
+  }
   if (!settings.enabled) return true;
   const now = new Date();
   const planTime = new Date(now); planTime.setHours(Math.max(settings.quietEnd + 1, 9), 0, 0, 0); if (planTime <= now) planTime.setDate(planTime.getDate() + 1);
