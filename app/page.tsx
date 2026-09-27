@@ -153,7 +153,7 @@ export default function Home() {
           <p className="eyebrow">V0.4 · AI GATEWAY</p><h3>接入真正的 AI</h3>
           <p>这里填写你部署的 Gateway 地址。API Key 永远放在服务器，不进入 APK。没配置时仍可离线工作。</p>
           <input value={gatewayDraft} onChange={e => setGatewayDraft(e.target.value)} placeholder="https://你的-gateway.example.com" />
-          <div className="gateway-row"><button onClick={() => { const baseUrl = gatewayDraft.trim().replace(/\\\/$/, ""); setGateway({ enabled: !!baseUrl, baseUrl }); }}>保存并启用</button><button className="ghost" onClick={() => { setGateway(defaultGatewayConfig); setGatewayDraft(""); }}>离线模式</button></div>
+          <div className="gateway-row"><button onClick={() => { const baseUrl = gatewayDraft.trim().replace(/\/$/, ""); setGateway({ enabled: !!baseUrl, baseUrl }); }}>保存并启用</button><button className="ghost" onClick={() => { setGateway(defaultGatewayConfig); setGatewayDraft(""); }}>离线模式</button></div>
         </div>
         <div className="card permission-card">
           <p className="eyebrow">权限中心</p><h3>让我多替你做一点</h3>
