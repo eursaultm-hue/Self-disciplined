@@ -60,43 +60,19 @@ jobs:
           p = Path("app/build.gradle")
           s = p.read_text()
           s = s.replace("versionCode 1", "versionCode 5").replace('versionName "1.0"', 'versionName "0.5.0"')
-          if "signingConfigs {" not in s:
-            s = s.replace("    buildTypes {", """    signingConfigs {
-        release {
-            storeFile file("release.keystore")
-            storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-            keyAlias System.getenv("ANDROID_KEY_ALIAS")
-            keyPassword System.getenv("ANDROID_KEY_PASSWORD")
-        }
-    }
-    buildTypes {""")
           p.write_text(s)
           PY
 
-      - name: Build signed release APK when signing secrets exist
-        if: ${{ env.HAS_ANDROID_SIGNING != '' }}
-        working-directory: android
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
-          ./gradlew assembleRelease
-
-      - name: Build debug APK fallback
-        if: ${{ env.HAS_ANDROID_SIGNING == '' }}
+      - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug
 
       - name: Prepare APK artifact
         working-directory: android
-        run: |
-          if [ -f app/build/outputs/apk/release/app-release.apk ]; then cp app/build/outputs/apk/release/app-release.apk ../self-disciplined.apk; else cp app/build/outputs/apk/debug/app-debug.apk ../self-disciplined.apk; fi
+        run: cp app/build/outputs/apk/debug/app-debug.apk ../self-disciplined-v0.5.0.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: self-disciplined-apk-v0.5.0
-          path: self-disciplined.apk
+          path: self-disciplined-v0.5.0.apk
