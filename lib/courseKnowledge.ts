@@ -87,7 +87,7 @@ export async function extractPdfText(file: File): Promise<{ text: string; pages:
   for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
     const page = await pdf.getPage(pageNo);
     const content = await page.getTextContent();
-    const pageText = content.items.map((item: { str?: string }) => item.str || "").join(" ").replace(/\s+/g, " ").trim();
+    const pageText = content.items.map((item) => ("str" in item ? item.str : "")).join(" ").replace(/\s+/g, " ").trim();
     chunks.push(`[第 ${pageNo} 页]\n${pageText}`);
   }
   return { text: chunks.join("\n\n"), pages: pdf.numPages };
