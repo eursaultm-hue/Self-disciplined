@@ -1,117 +1,87 @@
-import { Course, DailyReview, Goal, Store, Task, TaskStatus, today } from "./domain";
+import { Course, Store, Task, TaskStatus, today } from "./domain";
 
 export type StewardMessage = { role: "user" | "steward"; content: string; at: string };
-export type StewardMemory = {
-  summary: string;
-  lastUserMessage?: string;
-  updatedAt: string;
-};
-
-export type StewardDecision = {
-  reply: string;
-  taskUpdates?: { taskId: string; status?: TaskStatus; addMinutes?: number }[];
-  newTask?: Omit<Task, "id" | "actualMinutes" | "status">;
-  memory: StewardMemory;
-};
-
+export type StewardMemory = { summary: string; lastUserMessage?: string; updatedAt: string; issues?: string[] };
+export type StewardAction =
+  | { type: "UPDATE_TASK"; taskId: string; status?: TaskStatus; plannedMinutes?: number; plannedDate?: string }
+  | { type: "SET_AVAILABILITY"; date: string; minutes: number }
+  | { type: "CREATE_TASK"; task: Omit<Task, "id" | "actualMinutes" | "status"> };
+export type StewardDecision = { reply: string; actions: StewardAction[]; memory: StewardMemory };
 const now = () => new Date().toISOString();
 
 function findCourse(text: string, courses: Course[]) {
   const normalized = text.toLowerCase();
   return courses.find(c => normalized.includes(c.title.toLowerCase()));
 }
-
 function detectMinutes(text: string) {
   const m = text.match(/(\d+)\s*(分钟|min|小时|h)/i);
   if (!m) return undefined;
   const n = Number(m[1]);
   return /小时|h/i.test(m[2]) ? n * 60 : n;
 }
-
-function buildContext(store: Store) {
-  const active = store.tasks.filter(t => ["TODO", "IN_PROGRESS", "OVERDUE", "SKIPPED"].includes(t.status));
-  const todayTasks = active.filter(t => !t.plannedDate || t.plannedDate <= today());
-  const actual = store.sessions
-    .filter(s => s.startedAt.slice(0, 10) === today())
-    .reduce((n, s) => n + s.actualMinutes, 0);
-  return { todayTasks, actual };
+function activeTasks(store: Store) {
+  return store.tasks.filter(t => ["TODO", "IN_PROGRESS", "OVERDUE", "SKIPPED", "BLOCKED"].includes(t.status) && (!t.plannedDate || t.plannedDate <= today()));
+}
+function context(store: Store) {
+  const tasks = activeTasks(store);
+  const actual = store.sessions.filter(s => s.startedAt.slice(0, 10) === today()).reduce((n, s) => n + s.actualMinutes, 0);
+  return { tasks, actual };
+}
+function memoryAfter(memory: StewardMemory, summary: string, input: string): StewardMemory {
+  return { ...memory, summary, lastUserMessage: input, updatedAt: now() };
+}
+function makeCatchUpTask(course: Course, title: string): StewardAction {
+  return { type: "CREATE_TASK", task: { title, courseId: course.id, priorityTier: "SHOULD", plannedDate: today(), dueDate: today(), plannedMinutes: 25 } };
 }
 
-/**
- * V0.2 local steward. It intentionally uses deterministic rules first.
- * The UI can later swap this decision layer for a remote LLM without changing the data model.
- */
+/** V0.3 exposes explicit actions instead of directly mutating Store. A future LLM Gateway can return the same action contract. */
 export function stewardReply(text: string, store: Store, memory: StewardMemory): StewardDecision {
   const input = text.trim();
-  const lower = input.toLowerCase();
-  const { todayTasks, actual } = buildContext(store);
+  const { tasks, actual } = context(store);
   const course = findCourse(input, store.courses);
   const minutes = detectMinutes(input);
-  const updatedAt = now();
+  if (!input) return { reply: "你只需要告诉我现实发生了什么。我会把它转换成任务、时间、风险或计划调整。", actions: [], memory: memoryAfter(memory, memory.summary, input) };
 
-  if (!input) {
-    return { reply: "你只需要告诉我今天发生了什么。我会负责把它转换成计划、记录或调整。", memory: { ...memory, updatedAt } };
-  }
-
-  if (/没|没有|没做|没完成|拖延|打游戏|刷视频|忘了/.test(input)) {
-    const candidate = todayTasks.find(t => course ? t.courseId === course.id : true);
-    if (candidate) {
-      return {
-        reply: `收到。我把「${candidate.title}」记录为今天未完成，不批判原因。明天我会重新安排它，并根据这次执行情况调整任务大小。`,
-        taskUpdates: [{ taskId: candidate.id, status: "SKIPPED" }],
-        memory: { summary: `最近一次反馈：任务未完成。原因由用户描述为：${input}`, lastUserMessage: input, updatedAt }
-      };
-    }
+  if (/(没听懂|听不懂|不会|很难|不理解|跟不上|卡住)/.test(input)) {
+    const target = course ?? store.courses[0];
+    if (!target) return { reply: "我记下了这是一个学习理解问题，但目前还没有对应课程。先告诉我课程名称，我才能把它放进计划。", actions: [], memory: memoryAfter(memory, "学习理解风险：" + input, input) };
+    const candidate = tasks.find(t => t.courseId === target.id && t.status !== "DONE");
+    const actions: StewardAction[] = candidate
+      ? [{ type: "UPDATE_TASK", taskId: candidate.id, status: "BLOCKED", plannedMinutes: Math.min(Math.max(candidate.plannedMinutes, 20), 30) }]
+      : [makeCatchUpTask(target, target.title + "：补理解缺口")];
     return {
-      reply: "我记录下来了。今天没有匹配到具体任务，所以我不会凭空创造失败记录。你之后提到具体课程或任务时，我会关联起来。",
-      memory: { summary: input, lastUserMessage: input, updatedAt }
+      reply: candidate ? "收到。「" + target.title + "」出现理解风险，我先把相关任务标记为受阻，并缩小下一次任务规模。" : "收到。「" + target.title + "」出现理解风险，我自动建立了一个 25 分钟的补缺口任务。先补懂，再堆新内容。",
+      actions, memory: memoryAfter(memory, target.title + " 存在理解风险：" + input, input)
     };
   }
 
-  if (/完成了|做完了|搞定了|学完了/.test(input)) {
-    const candidate = todayTasks.find(t => course ? t.courseId === course.id : t.status === "IN_PROGRESS") ?? todayTasks[0];
+  if (/(完成了|做完了|搞定了|学完了)/.test(input)) {
+    const candidate = tasks.find(t => course ? t.courseId === course.id && t.status !== "DONE" : t.status === "IN_PROGRESS") ?? tasks.find(t => course ? t.courseId === course.id : true);
+    if (candidate) return { reply: "已记录「" + candidate.title + "」完成。计划会自动把它移出候选池。", actions: [{ type: "UPDATE_TASK", taskId: candidate.id, status: "DONE" }], memory: memoryAfter(memory, "完成任务：" + candidate.title, input) };
+  }
+
+  if (/(没|没有|没做|没完成|拖延|打游戏|刷视频|忘了|没学成)/.test(input)) {
+    const candidate = tasks.find(t => course ? t.courseId === course.id : t.status === "IN_PROGRESS") ?? tasks[0];
     if (candidate) {
-      return {
-        reply: `已记录「${candidate.title}」完成。你不用再手动改任务状态。`,
-        taskUpdates: [{ taskId: candidate.id, status: "DONE" }],
-        memory: { summary: `完成任务：${candidate.title}`, lastUserMessage: input, updatedAt }
-      };
+      const compressed = Math.max(15, Math.round(candidate.plannedMinutes * 0.75 / 5) * 5);
+      return { reply: "收到。「" + candidate.title + "」今天没有完成。我不做道德评价。下一次我会把它压缩到约 " + compressed + " 分钟，避免继续安排一个过大的任务。", actions: [{ type: "UPDATE_TASK", taskId: candidate.id, status: "SKIPPED", plannedMinutes: compressed }], memory: memoryAfter(memory, "任务未完成：" + candidate.title + "。用户反馈：" + input, input) };
     }
+    return { reply: "我记录了今天没学成，但目前没有匹配到具体任务，所以不会凭空制造一条失败记录。", actions: [], memory: memoryAfter(memory, "执行偏差：" + input, input) };
   }
 
-  if (/没听懂|听不懂|不会|很难|不理解|跟不上/.test(input)) {
+  if (/(今天|今晚|现在|空出|有时间)/.test(input) && minutes) {
     const target = course ?? store.courses[0];
-    if (target) {
-      return {
-        reply: `收到，我把「${target.title}」标记为理解风险。今天先不盲目增加新任务，下一次计划会优先安排一个小的补缺口任务。`,
-        memory: { summary: `${target.title} 存在理解风险：${input}`, lastUserMessage: input, updatedAt }
-      };
-    }
+    return { reply: "收到。我把今天的可用学习容量调整为 " + minutes + " 分钟。今日计划会立即按这个容量重新计算" + (target ? "，并优先考虑「" + target.title + "」" : "") + "。", actions: [{ type: "SET_AVAILABILITY", date: today(), minutes }], memory: memoryAfter(memory, "今日可用学习容量：" + minutes + " 分钟。" + (target ? "重点课程：" + target.title + "。" : ""), input) };
   }
 
-  if (/今天|今晚|现在|空出|有时间/.test(input) && minutes) {
-    const target = course ?? store.courses[0];
-    if (target) {
-      return {
-        reply: `收到，你现在大约有 ${minutes} 分钟。我会把这段时间视为新增可用容量，优先安排「${target.title}」相关任务。下一次打开今日页时会按新的容量重新规划。`,
-        memory: { summary: `新增可用学习时间：${minutes} 分钟。用户反馈：${input}`, lastUserMessage: input, updatedAt }
-      };
-    }
-  }
-
-  const taskNames = todayTasks.slice(0, 3).map(t => t.title).join("、");
-  return {
-    reply: actual > 0
-      ? `收到。我记下了。你今天已经有 ${actual} 分钟学习记录。当前候选任务是：${taskNames || "暂无"}。我会把你的这条信息作为下一次计划调整的依据。`
-      : `收到。我会处理这件事，不需要你自己维护任务表。当前候选任务是：${taskNames || "暂无"}。`,
-    memory: { summary: input, lastUserMessage: input, updatedAt }
-  };
+  const taskNames = tasks.slice(0, 3).map(t => t.title).join("、");
+  return { reply: actual > 0 ? "收到。我记下了。你今天已经学习 " + actual + " 分钟。当前候选任务：" + (taskNames || "暂无") + "。这条信息会进入下一次计划判断。" : "收到。我把这条现实反馈记下来了。当前候选任务：" + (taskNames || "暂无") + "。", actions: [], memory: memoryAfter(memory, input, input) };
 }
 
 export function buildMorningBrief(store: Store) {
-  const active = store.tasks.filter(t => ["TODO", "IN_PROGRESS", "OVERDUE", "SKIPPED"].includes(t.status));
+  const active = store.tasks.filter(t => ["TODO", "IN_PROGRESS", "OVERDUE", "SKIPPED", "BLOCKED"].includes(t.status));
   const must = active.filter(t => t.priorityTier === "MUST").slice(0, 2);
-  const should = active.filter(t => t.priorityTier === "SHOULD").slice(0, 2);
-  if (!active.length) return "今天还没有任务。我不会让你填一堆表格，先告诉我最近最重要的一件学习事情，我再帮你建立第一条任务。";
-  return `今天我先替你守着：必须完成：${must.map(t => t.title).join("、") || "暂无"}；建议完成：${should.map(t => t.title).join("、") || "暂无"}。你只需要告诉我现实中发生了什么，剩下的计划由我调整。`;
+  const blocked = active.filter(t => t.status === "BLOCKED").slice(0, 2);
+  if (!active.length) return "今天还没有任务。我不会让你先填完整个系统，先告诉我最重要的一件学习事情。";
+  return "今天我先替你守着：必须完成：" + (must.map(t => t.title).join("、") || "暂无") + "；" + (blocked.length ? "受阻：" + blocked.map(t => t.title).join("、") + "；" : "") + "你只需要告诉我现实发生了什么，计划由我调整。";
 }
