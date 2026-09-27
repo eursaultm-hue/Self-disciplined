@@ -1,0 +1,10 @@
+{
+  "version": "0.5.0",
+  "versionCode": 5,
+  "downloadUrl": "https://github.com/eursaultm-hue/Self-disciplined/releases/latest",
+  "notes": [
+    "V0.5 主动监督",
+    "Android 原生通知",
+    "应用内更新检查"
+  ]
+}
