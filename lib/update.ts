@@ -1,4 +1,4 @@
-export const APP_VERSION = "0.5.0";
+export const APP_VERSION = "0.6.0";
 export const UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/eursaultm-hue/Self-disciplined/main/public/update.json";
 export type UpdateManifest = { version: string; versionCode: number; downloadUrl: string; notes: string[] };
 function compareVersion(a: string, b: string) {
