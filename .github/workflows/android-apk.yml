@@ -19,6 +19,8 @@ permissions:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    env:
+      HAS_ANDROID_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -72,7 +74,7 @@ jobs:
           PY
 
       - name: Build signed release APK when signing secrets exist
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_ANDROID_SIGNING != '' }}
         working-directory: android
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -84,7 +86,7 @@ jobs:
           ./gradlew assembleRelease
 
       - name: Build debug APK fallback
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 == '' }}
+        if: ${{ env.HAS_ANDROID_SIGNING == '' }}
         working-directory: android
         run: ./gradlew assembleDebug
 
