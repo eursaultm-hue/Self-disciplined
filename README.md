@@ -1,43 +1,67 @@
-# Personal Learning OS — V0.1.1
+# Personal Learning OS — V0.3
 
-一个单用户、浏览器本地持久化的个人学习操作系统版本，支持长期目标、课程、固定课程表、任务优先级、每日计划、学习记录和每日复盘。
+一个以 **AI 学习管家** 为核心的个人学习操作系统。
+
+## 产品原则
+
+> **用户输入越少，AI 完成的管理越多。**
+
+用户不需要每天维护完整任务表，而是直接告诉管家现实发生了什么。系统负责把现实信息转换成任务状态、可用时间、学习风险、计划调整和长期记忆。
+
+## V0.3 的核心变化
+
+V0.2 的 Steward 主要是确定性规则。V0.3 开始把“理解”和“执行”拆开：
+
+`用户现实 → Steward Decision → Action → Store → Planner → 新计划`
+
+Steward 不再直接修改数据，而是产生明确的 `StewardAction[]`：
+
+- `UPDATE_TASK`：完成、跳过、受阻、压缩任务
+- `SET_AVAILABILITY`：根据现实变化修改今日可用学习容量
+- `CREATE_TASK`：自动建立补缺任务
+- Planner 根据 Store 的变化立即重新计算今日计划
+
+这套 Action Contract 是后续接入真正 LLM Gateway 的接口。未来 LLM 只需要理解用户语言并返回同一种 Action，不需要直接操作数据库。
+
+## V0.3 已实现
+
+- V0.2 数据自动迁移到 V0.3 存储空间
+- 自然语言反馈真正产生可执行 Action
+- “今晚只有 60 分钟”会修改当天可用容量并触发重新规划
+- “今天没学成”会标记具体任务未完成，并压缩下一次任务规模
+- “电子学没听懂”会记录理解风险、阻塞相关任务，并建立小型补缺任务
+- “做完了”会自动完成匹配任务
+- 任务状态变化后今日计划自动刷新
+- 明确保留离线可用的确定性决策层
+- 保留 V0.1 / V0.2 数据，不要求用户重新录入
+
+## 当前边界
+
+当前版本**还没有真正调用远程 LLM**。这样做是为了先把 Agent 的工具契约和数据流稳定下来。
+
+下一阶段接入：
+
+1. 安全的后端 AI Gateway
+2. 真正的 LLM Agent
+3. Tool Calling / Structured Output
+4. 主动监督调度器
+5. 学习行为模型
+6. 日历、课表、文件等权限
+7. 更可靠的 Android 原生通知
 
 ## 核心循环
 
-目标 → 计划 → 执行 → 记录 → 复盘 → 调整下一天计划
+`现实信息 → AI 理解 → Action → 计划 → 主动提醒 → 执行 → 记录 → 复盘 → 自适应调整`
 
-## 当前版本与数据安全
+## 构建
 
-- 当前应用版本：0.1.1
-- Android Application ID：com.eursaultm.selfdisciplined
-- 本地学习数据继续使用 personal-learning-os-v01 这个 storage key。
-- 数据增加 schema version 与迁移层，为后续数据结构升级做准备。
-- 正常 Android 覆盖安装要保留数据，必须保持相同 Application ID、递增的 versionCode，并使用同一个发布签名密钥。
-- 当前仓库提供 Android debug 构建流程，但 debug APK 仅用于开发测试，不能把不同构建机器生成的 debug APK 当作长期升级包。
+V0.3 的 Android Debug APK 由 GitHub Actions 自动构建。
 
 ## 运行
 
+```bash
 npm install
 npm run dev
+```
 
-打开 http://localhost:3000。数据保存在当前浏览器的 localStorage；清除站点数据会清除本地学习数据。
-
-## Android 构建
-
-GitHub Actions 会在手动触发或推送 v* 标签时构建 debug APK。
-
-版本号来源于 package.json。构建脚本会把 SemVer 映射为 Android versionCode：
-
-X.Y.Z → X×1,000,000 + Y×1,000 + Z
-
-正式发布前，需要配置固定的 Android release keystore 与 GitHub Secrets，然后把构建流程切换为 release 签名 APK。
-
-## 计划规则
-
-每日计划从可用分钟数中扣减固定课程表时段，再按 MUST / SHOULD / COULD、目标与课程优先级，以及是否逾期或到期进行排序。计划不会超出当天剩余容量。
-
-## V0.1.x 边界
-
-当前阶段重点是把能运行的网页原型变成可持续迭代、可安全升级的 Android 应用基础设施。
-
-暂不包含认证、云同步、RAG、向量数据库、多 Agent、知识图谱和复杂仪表盘。后续可逐步迁移到更可靠的本地数据库或云端同步架构。
+数据默认保存在设备本地。版本升级通过新的存储 key 读取 V0.1 / V0.2 数据，避免一次升级把历史学习数据直接覆盖。
