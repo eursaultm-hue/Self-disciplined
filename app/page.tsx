@@ -4,9 +4,10 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Course, DailyReview, Goal, PriorityTier, Store, Task, TaskStatus, id, today } from "../lib/domain";
 import { generateDailyPlan } from "../lib/planner";
 import { buildMorningBrief, stewardReply, StewardAction, StewardMemory, StewardMessage } from "../lib/steward";
+import { askGateway, defaultGatewayConfig, GatewayConfig } from "../lib/gateway";
 
-const key = "personal-learning-os-v03";
-const legacyKeys = ["personal-learning-os-v02", "personal-learning-os-v01"];
+const key = "personal-learning-os-v04";
+const legacyKeys = ["personal-learning-os-v03", "personal-learning-os-v02", "personal-learning-os-v01"];
 const blank: Store = { goals: [], courses: [], tasks: [], sessions: [], reviews: [], schedule: [], availability: {} };
 const labels: Record<TaskStatus, string> = { TODO: "待开始", IN_PROGRESS: "进行中", DONE: "已完成", OVERDUE: "已逾期", SKIPPED: "已跳过", BLOCKED: "受阻", CANCELLED: "已取消" };
 
@@ -35,11 +36,19 @@ export default function Home() {
   const [memory, setMemory] = useState<StewardMemory>({ summary: "", updatedAt: new Date().toISOString() });
   const [chat, setChat] = useState("");
   const [notificationEnabled, setNotificationEnabled] = useState(false);
+  const [gateway, setGateway] = useState<GatewayConfig>(defaultGatewayConfig);
+  const [gatewayDraft, setGatewayDraft] = useState("");
+  const [agentSource, setAgentSource] = useState<"llm" | "offline">("offline");
+  const [agentBusy, setAgentBusy] = useState(false);
 
   useEffect(() => {
     setStore(load());
     setMessages(loadMessages());
-    try { setMemory(JSON.parse(localStorage.getItem("personal-learning-os-v03-memory") || "null") || { summary: "", updatedAt: new Date().toISOString() }); } catch {}
+    try {
+      const savedGateway = JSON.parse(localStorage.getItem("personal-learning-os-v04-gateway") || "null");
+      if (savedGateway?.baseUrl) { setGateway(savedGateway); setGatewayDraft(savedGateway.baseUrl); }
+    } catch {}
+    try { setMemory(JSON.parse(localStorage.getItem("personal-learning-os-v04-memory") || "null") || { summary: "", updatedAt: new Date().toISOString() }); } catch {}
     setReady(true);
   }, []);
 
@@ -47,7 +56,8 @@ export default function Home() {
     if (!ready) return;
     localStorage.setItem(key, JSON.stringify(store));
     localStorage.setItem("personal-learning-os-v03-chat", JSON.stringify(messages.slice(-80)));
-    localStorage.setItem("personal-learning-os-v03-memory", JSON.stringify(memory));
+    localStorage.setItem("personal-learning-os-v04-memory", JSON.stringify(memory));
+    localStorage.setItem("personal-learning-os-v04-gateway", JSON.stringify(gateway));
   }, [store, messages, memory, ready]);
 
   const available = store.availability[date] ?? 120;
@@ -56,15 +66,20 @@ export default function Home() {
   const actualToday = store.sessions.filter(s => s.startedAt.slice(0, 10) === date).reduce((n, s) => n + s.actualMinutes, 0);
   const update = (fn: (old: Store) => Store) => setStore(old => fn(old));
 
-  const sendToSteward = (text: string) => {
+  const sendToSteward = async (text: string) => {
     const input = text.trim();
-    if (!input) return;
+    if (!input || agentBusy) return;
     const userMessage: StewardMessage = { role: "user", content: input, at: new Date().toISOString() };
-    const decision = stewardReply(input, store, memory);
-    update(s => applyStewardActions(s, decision.actions));
-    setMessages(prev => [...prev, userMessage, { role: "steward", content: decision.reply, at: new Date().toISOString() }]);
-    setMemory(decision.memory);
+    const fallback = stewardReply(input, store, memory);
+    setMessages(prev => [...prev, userMessage]);
     setChat("");
+    setAgentBusy(true);
+    const decision = await askGateway(gateway, input, store, memory, fallback);
+    update(s => applyStewardActions(s, decision.actions));
+    setMessages(prev => [...prev, { role: "steward", content: decision.reply, at: new Date().toISOString() }]);
+    setMemory(decision.memory);
+    setAgentSource(decision.source);
+    setAgentBusy(false);
   };
 
   const requestNotification = async () => {
@@ -88,7 +103,7 @@ export default function Home() {
   return <main className="shell">
     <header className="topbar">
       <div>
-        <p className="eyebrow">PERSONAL LEARNING OS · V0.3</p>
+        <p className="eyebrow">PERSONAL LEARNING OS · V0.4</p>
         <h1>自律 <span>AI 管家</span></h1>
         <p className="sub">你负责告诉我现实发生了什么，我负责把它变成可执行的下一步。</p>
       </div>
@@ -114,13 +129,14 @@ export default function Home() {
             {!messages.length && <div className="welcome-message">例如：<b>“今天电子学完全没听懂。”</b>、<b>“我晚上只有一个小时。”</b>、<b>“数分做完了。”</b></div>}
             {messages.slice(-8).map((m, i) => <div className={`message ${m.role}`} key={i}><span>{m.role === "user" ? "你" : "管家"}</span><p>{m.content}</p></div>)}
           </div>
-          <form className="chat-input" onSubmit={e => { e.preventDefault(); sendToSteward(chat); }}>
-            <input value={chat} onChange={e => setChat(e.target.value)} placeholder="今天发生了什么？" />
-            <button>交给管家</button>
+          <form className="chat-input" onSubmit={e => { e.preventDefault(); void sendToSteward(chat); }}>
+            <input value={chat} onChange={e => setChat(e.target.value)} placeholder={agentBusy ? "AI 正在判断…" : "今天发生了什么？"} disabled={agentBusy} />
+            <button disabled={agentBusy}>{agentBusy ? "处理中" : "交给管家"}</button>
           </form>
           <div className="quick-actions">
-            {["今天没学成", "今天电子学没听懂", "我现在有30分钟", "我完成了"].map(x => <button key={x} onClick={() => sendToSteward(x)}>{x}</button>)}
+            {["今天没学成", "今天电子学没听懂", "我现在有30分钟", "我完成了"].map(x => <button key={x} disabled={agentBusy} onClick={() => void sendToSteward(x)}>{x}</button>)}
           </div>
+          <div className="agent-source">决策来源：{agentSource === "llm" ? "远程 LLM Agent" : "本地离线管家"}{gateway.enabled && agentSource === "offline" ? "（Gateway 未连接，已自动降级）" : ""}</div>
         </div>
 
         <div className="section-head"><div><h2>今天要做什么</h2><p>{date} · 实际学习 {actualToday} 分钟</p></div><button className="ghost" onClick={() => setView("today")}>查看完整计划</button></div>
@@ -133,6 +149,12 @@ export default function Home() {
       </div>
 
       <aside className="side-column">
+        <div className="card permission-card">
+          <p className="eyebrow">V0.4 · AI GATEWAY</p><h3>接入真正的 AI</h3>
+          <p>这里填写你部署的 Gateway 地址。API Key 永远放在服务器，不进入 APK。没配置时仍可离线工作。</p>
+          <input value={gatewayDraft} onChange={e => setGatewayDraft(e.target.value)} placeholder="https://你的-gateway.example.com" />
+          <div className="gateway-row"><button onClick={() => { const baseUrl = gatewayDraft.trim().replace(/\\\/$/, ""); setGateway({ enabled: !!baseUrl, baseUrl }); }}>保存并启用</button><button className="ghost" onClick={() => { setGateway(defaultGatewayConfig); setGatewayDraft(""); }}>离线模式</button></div>
+        </div>
         <div className="card permission-card">
           <p className="eyebrow">权限中心</p><h3>让我多替你做一点</h3>
           <p>通知权限开启后，我可以开始承担主动提醒。日历、文件、屏幕使用情况等权限会在后续版本逐步接入。</p>
