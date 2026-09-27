@@ -1,4 +1,4 @@
-# Personal Learning OS — V0.3
+# Personal Learning OS — V0.4
 
 一个以 **AI 学习管家** 为核心的个人学习操作系统。
 
@@ -8,61 +8,108 @@
 
 用户不需要每天维护完整任务表，而是直接告诉管家现实发生了什么。系统负责把现实信息转换成任务状态、可用时间、学习风险、计划调整和长期记忆。
 
-## V0.3 的核心变化
+## V0.4：真正进入 Agent 架构
 
-V0.2 的 Steward 主要是确定性规则。V0.3 开始把“理解”和“执行”拆开：
+V0.3 已经把“理解”和“执行”拆成 Action Contract。V0.4 在这个契约上增加了真正的 **LLM Gateway + Agent Decision Layer**：
 
-`用户现实 → Steward Decision → Action → Store → Planner → 新计划`
+`现实输入 → LLM Gateway → Agent Decision(JSON) → 本地 Action 校验 → Store → Planner`
 
-Steward 不再直接修改数据，而是产生明确的 `StewardAction[]`：
+关键原则：
 
-- `UPDATE_TASK`：完成、跳过、受阻、压缩任务
-- `SET_AVAILABILITY`：根据现实变化修改今日可用学习容量
-- `CREATE_TASK`：自动建立补缺任务
-- Planner 根据 Store 的变化立即重新计算今日计划
+- APK **不保存任何模型 API Key**。
+- LLM 不能直接修改本地 Store。
+- LLM 只能返回结构化 Action。
+- APK 会再次校验任务 ID、课程 ID、目标 ID、状态和时间范围。
+- Gateway 不可用时，自动降级到 V0.3 本地确定性管家，不让整个系统因为网络或模型故障瘫痪。
+- 用户可以看到当前消息究竟来自“远程 LLM Agent”还是“本地离线管家”。
 
-这套 Action Contract 是后续接入真正 LLM Gateway 的接口。未来 LLM 只需要理解用户语言并返回同一种 Action，不需要直接操作数据库。
+## V0.4 已实现
 
-## V0.3 已实现
+### 1. Agent Decision Contract
 
-- V0.2 数据自动迁移到 V0.3 存储空间
-- 自然语言反馈真正产生可执行 Action
-- “今晚只有 60 分钟”会修改当天可用容量并触发重新规划
-- “今天没学成”会标记具体任务未完成，并压缩下一次任务规模
-- “电子学没听懂”会记录理解风险、阻塞相关任务，并建立小型补缺任务
-- “做完了”会自动完成匹配任务
-- 任务状态变化后今日计划自动刷新
-- 明确保留离线可用的确定性决策层
-- 保留 V0.1 / V0.2 数据，不要求用户重新录入
+新增 `lib/agent.ts`：
 
-## 当前边界
+- 校验 LLM 返回的 JSON。
+- 只接受已有 task/course/goal ID。
+- 限制任务时长与今日可用时间范围。
+- 丢弃未知 Action。
+- 将 LLM 结果统一转换成现有 `StewardAction[]`。
 
-当前版本**还没有真正调用远程 LLM**。这样做是为了先把 Agent 的工具契约和数据流稳定下来。
+### 2. AI Gateway Client
 
-下一阶段接入：
+新增 `lib/gateway.ts`：
 
-1. 安全的后端 AI Gateway
-2. 真正的 LLM Agent
-3. Tool Calling / Structured Output
-4. 主动监督调度器
-5. 学习行为模型
-6. 日历、课表、文件等权限
-7. 更可靠的 Android 原生通知
+- APK 只保存 Gateway URL。
+- 12 秒超时。
+- 请求失败自动 fallback 到本地 Steward。
+- 不把 provider API Key 放进客户端。
+
+### 3. Server-side Gateway 模板
+
+新增 `gateway/src/index.ts`：
+
+- OpenAI-compatible provider 接口。
+- Provider API Key 只存在服务器环境变量。
+- JSON-only Agent 输出。
+- CORS 支持。
+- 基础输入长度限制。
+
+需要的服务器环境变量：
+
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `OPENAI_MODEL`
+
+### 4. Android UI
+
+首页新增：
+
+- AI Gateway 地址配置。
+- 保存并启用 / 离线模式。
+- Agent 来源显示。
+- LLM 请求中的处理中状态。
+- Gateway 故障自动降级提示。
+
+### 5. 测试
+
+新增 Agent Contract 测试：
+
+- 合法 Action 可以通过。
+- 虚构 taskId 会被拒绝。
+- 超出安全范围的时间会被拒绝。
+
+## 数据迁移
+
+V0.4 会优先读取：
+
+1. V0.4
+2. V0.3
+3. V0.2
+4. V0.1
+
+因此安装新版 APK 不要求重新录入已有学习数据。
+
+## 当前真实边界
+
+V0.4 **已经具备真正 LLM Agent 的客户端和服务器契约，但默认仍是离线模式**。原因很简单：把 API Key 硬塞进 APK 是一种非常有创意的安全事故。
+
+要让远程 LLM 真正工作，需要把 `gateway/src/index.ts` 部署到 HTTPS 服务，并在服务端配置模型密钥，然后把 Gateway URL 填入 APK。
+
+## 下一阶段
+
+V0.5 不再优先增加花哨页面，而是补上“主动监督”：
+
+1. Android 原生通知调度
+2. 安静时间与提醒上限
+3. 早晨自动生成今日计划
+4. 到点提醒 / 延迟提醒 / 未执行追踪
+5. 晚间自动复盘
+6. 任务开始 / 暂停 / 完成的真实执行记录
+7. 基础行为数据：计划时间 vs 实际时间、延期次数、完成率
+8. 为后续日历、文件、屏幕使用时间权限预留 Tool 接口
+
+之后再进入 V0.6：课程 PDF → 知识点 → 学习任务 → 法语数学/电子学学习系统。
 
 ## 核心循环
 
 `现实信息 → AI 理解 → Action → 计划 → 主动提醒 → 执行 → 记录 → 复盘 → 自适应调整`
-
-## 构建
-
-V0.3 的 Android Debug APK 由 GitHub Actions 自动构建。
-
-## 运行
-
-```bash
-npm install
-npm run dev
-```
-
-数据默认保存在设备本地。版本升级通过新的存储 key 读取 V0.1 / V0.2 数据，避免一次升级把历史学习数据直接覆盖。
-
