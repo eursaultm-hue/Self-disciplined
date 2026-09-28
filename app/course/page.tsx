@@ -13,6 +13,7 @@ export default function CourseWorkspace() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("PDF 会先在设备本地提取文字，不上传文件。");
   const [selected, setSelected] = useState<string>("");
+  const [fileName, setFileName] = useState("");
 
   useEffect(() => {
     try { setDb(JSON.parse(localStorage.getItem(COURSE_KNOWLEDGE_KEY) || "null") || blank); } catch {}
@@ -24,6 +25,7 @@ export default function CourseWorkspace() {
   const importPdf = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFileName(file.name);
     setBusy(true); setMessage("正在读取 PDF…");
     try {
       const { text, pages } = await extractPdfText(file);
@@ -41,6 +43,7 @@ export default function CourseWorkspace() {
 
   const current = db.documents.find(d => d.id === selected);
   const currentSections = db.sections.filter(s => s.documentId === selected);
+  const currentPoints = db.points.filter(p => currentSections.some(s => s.id === p.sectionId));
 
   return <main className="shell">
     <header className="topbar">
@@ -51,23 +54,32 @@ export default function CourseWorkspace() {
     <section className="two">
       <div>
         <div className="card form">
-          <p className="eyebrow">IMPORT</p><h2>导入课程 PDF</h2>
-          <p className="hint">当前版本先做本地文字提取与结构识别。扫描版/图片型 PDF、复杂公式 OCR、深度知识点生成放到后续版本。</p>
-          <input value={courseId} onChange={e => setCourseId(e.target.value)} placeholder="可选：课程 ID，例如 数学分析" />
-          <input type="file" accept="application/pdf,.pdf" onChange={importPdf} disabled={busy} />
+          <p className="eyebrow">IMPORT</p>
+          <h2>导入课程 PDF</h2>
+          <p className="hint">先选择课程，再点击下面的<strong>「选择 PDF 并导入」</strong>。文件只在本机处理，不会自动上传。</p>
+          <label>课程名称（可选）
+            <input value={courseId} onChange={e => setCourseId(e.target.value)} placeholder="例如：数学分析 / 线性代数 / 电子学" />
+          </label>
+          <input id="course-pdf-input" type="file" accept="application/pdf,.pdf" onChange={importPdf} disabled={busy} style={{ display: "none" }} />
+          <label htmlFor="course-pdf-input" style={{ display: "block", padding: "16px 18px", marginTop: 14, border: "2px dashed #888", borderRadius: 12, textAlign: "center", cursor: busy ? "wait" : "pointer", fontWeight: 700 }}>
+            {busy ? "正在导入 PDF…" : "📄 选择 PDF 并导入"}
+          </label>
+          <p className="hint">{fileName ? `已选择：${fileName}` : "支持 .pdf；扫描版/图片型 PDF 暂不做 OCR。"}</p>
           <div className="notice">{message}</div>
         </div>
+
         <div className="card">
           <h3>已导入资料</h3>
-          {db.documents.length ? db.documents.map(d => <button key={d.id} className="ghost" onClick={() => setSelected(d.id)} style={{display:"block",width:"100%",textAlign:"left",marginBottom:8}}>{d.name} · {d.pages} 页 · {Math.round(d.size/1024)} KB</button>) : <p className="empty">还没有 PDF。这个入口现在终于真的存在了，人类科技暂时没有白发展。</p>}
+          {db.documents.length ? db.documents.map(d => <button key={d.id} className="ghost" onClick={() => setSelected(d.id)} style={{display:"block",width:"100%",textAlign:"left",marginBottom:8}}>{d.name} · {d.pages} 页 · {Math.round(d.size/1024)} KB</button>) : <p className="empty">还没有 PDF。</p>}
         </div>
       </div>
+
       <div>
         {current ? <>
-          <div className="card"><p className="eyebrow">DOCUMENT</p><h2>{current.name}</h2><p>{current.pages} 页 · {currentSections.length} 个结构段 · {db.points.filter(p => p.sectionId && currentSections.some(s => s.id === p.sectionId)).length} 个知识点</p></div>
-          <div className="card"><h3>结构</h3>{currentSections.slice(0,40).map(s => <div key={s.id} style={{padding:"10px 0",borderBottom:"1px solid #ddd"}}><b>{s.order + 1}. {s.title}</b><p className="hint">{s.text.slice(0,280)}{s.text.length>280?"…":""}</p></div>)}</div>
-          <div className="card"><h3>知识点候选</h3>{db.points.filter(p => currentSections.some(s => s.id === p.sectionId)).map(p => <div key={p.id} style={{padding:"9px 0",borderBottom:"1px solid #ddd"}}><b>{p.title}</b><small> · {p.type} · 重要度 {p.importance}</small></div>) || <p className="empty">暂未识别。可以让 Gateway 在下一层进行语义整理。</p>}</div>
-        </> : <div className="card"><h2>课程资料工作台</h2><p>这里会逐步形成：PDF → Chapitre/Section → Définition/Théorème/Propriété/Formule → 知识点 → 学习任务 → 掌握度。</p></div>}
+          <div className="card"><p className="eyebrow">DOCUMENT</p><h2>{current.name}</h2><p>{current.pages} 页 · {currentSections.length} 个结构段 · {currentPoints.length} 个知识点</p></div>
+          <div className="card"><h3>结构</h3>{currentSections.length ? currentSections.slice(0,40).map(s => <div key={s.id} style={{padding:"10px 0",borderBottom:"1px solid #ddd"}}><b>{s.order + 1}. {s.title}</b><p className="hint">{s.text.slice(0,280)}{s.text.length>280?"…":""}</p></div>) : <p className="empty">暂未识别章节结构。</p>}</div>
+          <div className="card"><h3>知识点候选</h3>{currentPoints.length ? currentPoints.map(p => <div key={p.id} style={{padding:"9px 0",borderBottom:"1px solid #ddd"}}><b>{p.title}</b><small> · {p.type} · 重要度 {p.importance}</small></div>) : <p className="empty">暂未识别。后续可以让 Gateway 做语义整理。</p>}</div>
+        </> : <div className="card"><h2>课程资料工作台</h2><p>这里会逐步形成：PDF → Chapitre/Section → Définition/Théorème/Propriété/Formule → 知识点 → 学习任务 → 掌握度。</p><div className="notice">当前最先要做的就是上面的「选择 PDF 并导入」。</div></div>}
       </div>
     </section>
   </main>;
