@@ -13,16 +13,36 @@ const legacyKeys = ["personal-learning-os-v05", "personal-learning-os-v04", "per
 const blank: Store = { goals: [], courses: [], tasks: [], sessions: [], reviews: [], schedule: [], availability: {} };
 const labels: Record<TaskStatus, string> = { TODO: "待开始", IN_PROGRESS: "进行中", DONE: "已完成", OVERDUE: "已逾期", SKIPPED: "已跳过", BLOCKED: "受阻", CANCELLED: "已取消" };
 
+function hasStoreData(store: Store) {
+  return store.goals.length > 0 || store.courses.length > 0 || store.tasks.length > 0 || store.sessions.length > 0 || store.reviews.length > 0 || store.schedule.length > 0 || Object.keys(store.availability).length > 0;
+}
+
+function readStore(raw: string | null): Store | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Store;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch { return null; }
+}
+
 function load(): Store {
   try {
-    const current = localStorage.getItem(key);
-    if (current) return JSON.parse(current);
+    const current = readStore(localStorage.getItem(key));
+    if (current && hasStoreData(current)) return current;
     for (const legacyKey of legacyKeys) {
-      const legacy = localStorage.getItem(legacyKey);
-      if (legacy) return JSON.parse(legacy);
+      const legacy = readStore(localStorage.getItem(legacyKey));
+      if (legacy && hasStoreData(legacy)) return legacy;
     }
-    return blank;
+    return current || blank;
   } catch { return blank; }
+}
+
+function findLegacyStore(): Store | null {
+  for (const legacyKey of legacyKeys) {
+    const legacy = readStore(localStorage.getItem(legacyKey));
+    if (legacy && hasStoreData(legacy)) return legacy;
+  }
+  return null;
 }
 
 function loadMessages(): StewardMessage[] {
@@ -45,9 +65,14 @@ export default function Home() {
   const [supervisor, setSupervisor] = useState<SupervisorSettings>(defaultSupervisorSettings);
   const [updateInfo, setUpdateInfo] = useState<UpdateManifest | null>(null);
   const [updateChecking, setUpdateChecking] = useState(false);
+  const [migrationNotice, setMigrationNotice] = useState("");
 
   useEffect(() => {
-    setStore(load());
+    const initial = load();
+    setStore(initial);
+    if (hasStoreData(initial) && !hasStoreData(readStore(localStorage.getItem(key)) || blank)) {
+      setMigrationNotice("已自动从旧版本恢复你的数据。");
+    }
     setMessages(loadMessages());
     try { setSupervisor(JSON.parse(localStorage.getItem("personal-learning-os-v05-supervisor") || "null") || defaultSupervisorSettings); } catch {}
     try {
@@ -66,6 +91,16 @@ export default function Home() {
     localStorage.setItem("personal-learning-os-v05-supervisor", JSON.stringify(supervisor));
     localStorage.setItem("personal-learning-os-v04-gateway", JSON.stringify(gateway));
   }, [store, messages, memory, gateway, supervisor, ready]);
+
+  const recoverLegacy = () => {
+    const legacy = findLegacyStore();
+    if (!legacy) {
+      setMigrationNotice("没有找到可恢复的 V0.5/V0.4 数据。可能是旧版本数据已被系统清除。");
+      return;
+    }
+    setStore(legacy);
+    setMigrationNotice("已恢复旧版本数据，并同步到 V0.6。");
+  };
 
   const available = store.availability[date] ?? 120;
   const plan = useMemo(() => generateDailyPlan({ date, availableMinutes: available, tasks: store.tasks, goals: store.goals, courses: store.courses, schedule: store.schedule }), [store, date, available]);
@@ -128,6 +163,7 @@ export default function Home() {
             <p>{buildMorningBrief(store)}</p>
           </div>
         </div>
+        {migrationNotice && <div className="notice">{migrationNotice}</div>}
 
         <div className="chat-card">
           <div className="section-head"><div><h2>告诉我发生了什么</h2><p>不用填表。直接像和管家说话一样。</p></div></div>
@@ -166,7 +202,24 @@ export default function Home() {
           <p>通知权限开启后，我可以开始承担主动提醒。日历、文件、屏幕使用情况等权限会在后续版本逐步接入。</p>
           <button onClick={requestNotification}>{notificationEnabled ? "✓ 通知已开启" : "开启通知权限"}</button><button className="ghost" onClick={async () => { const ok = await enableSupervisor(supervisor, true); setNotificationEnabled(ok); }}>发送测试通知</button>
         </div>
-        <div className="card permission-card"><p className="eyebrow">V0.6 · 课程知识库</p><h3>PDF → 课程结构 → 知识点</h3><p>把数学分析、线代、电子学等课程 PDF 导入设备本地，先提取原文和结构，再逐步接入 Gateway 做知识点整理。</p><button onClick={() => { window.location.href = "/course"; }}>打开课程知识库</button></div>\n        <div className="card permission-card"><p className="eyebrow">应用更新</p><h3>当前版本 V0.6.0</h3><p>{updateChecking ? "正在检查…" : updateInfo ? `发现新版本 ${updateInfo.version}` : "当前已是最新版本，或暂时没有可用更新。"}</p><button onClick={async () => { setUpdateChecking(true); setUpdateInfo(await checkForUpdate()); setUpdateChecking(false); }}>检查更新</button>{updateInfo && <button className="ghost" onClick={() => { window.location.href = updateInfo.downloadUrl; }}>前往更新</button>}<small>更新通道已接入，但真正的一键覆盖安装还需要稳定 APK 下载地址和持久签名。</small></div>\n        <div className="card mini-card"><small>今日容量</small><strong>{available} 分钟</strong><span>已安排 {plannedMinutes} 分钟</span></div>
+        <div className="card permission-card">
+          <p className="eyebrow">V0.6 · 课程知识库</p><h3>PDF → 课程结构 → 知识点</h3>
+          <p>把数学分析、线代、电子学等课程 PDF 导入设备本地，先提取原文和结构，再逐步接入 Gateway 做知识点整理。</p>
+          <button onClick={() => { window.location.href = "/course"; }}>打开课程知识库 · 导入 PDF</button>
+        </div>
+        <div className="card permission-card">
+          <p className="eyebrow">数据恢复</p><h3>找回 V0.5 数据</h3>
+          <p>如果升级后任务、课程或目标消失，先尝试从旧版本本地数据恢复。恢复不会上传数据。</p>
+          <button className="ghost" onClick={recoverLegacy}>恢复旧版本数据</button>
+        </div>
+        <div className="card permission-card">
+          <p className="eyebrow">应用更新</p><h3>当前版本 V0.6.0</h3>
+          <p>{updateChecking ? "正在检查…" : updateInfo ? `发现新版本 ${updateInfo.version}` : "当前已是最新版本，或暂时没有可用更新。"}</p>
+          <button onClick={async () => { setUpdateChecking(true); setUpdateInfo(await checkForUpdate()); setUpdateChecking(false); }}>检查更新</button>
+          {updateInfo && <button className="ghost" onClick={() => { window.location.href = updateInfo.downloadUrl; }}>前往更新</button>}
+          <small>更新通道已接入，但真正的一键覆盖安装还需要稳定 APK 下载地址和持久签名。</small>
+        </div>
+        <div className="card mini-card"><small>今日容量</small><strong>{available} 分钟</strong><span>已安排 {plannedMinutes} 分钟</span></div>
         <div className="card mini-card"><small>最近记忆</small><p>{memory.summary || "还没有。你说的第一句话就会成为系统的一部分。"}</p></div>
         <div className="card principle"><small>核心原则</small><strong>用户输入越少，AI 完成的管理越多。</strong></div>
       </aside>
