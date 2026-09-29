@@ -113,6 +113,7 @@ export default function Home() {
       memory,
       supervisor,
       gateway,
+      courseKnowledge: localStorage.getItem("personal-learning-os-v06-knowledge"),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -147,7 +148,8 @@ export default function Home() {
       if (parsed.memory) setMemory(parsed.memory);
       if (parsed.supervisor) setSupervisor(parsed.supervisor);
       if (parsed.gateway) setGateway(parsed.gateway);
-      setMigrationNotice("备份已恢复到 V0.6。");
+      if (parsed.courseKnowledge) localStorage.setItem("personal-learning-os-v06-knowledge", String(parsed.courseKnowledge));
+      setMigrationNotice("备份已恢复到 V0.6。课程知识库也会随备份一起恢复。");
     } catch (err) {
       setMigrationNotice(err instanceof Error ? err.message : "备份恢复失败。");
     } finally {
