@@ -80,7 +80,7 @@ export function inferKnowledgePoints(section: CourseSection, courseId?: string):
 
 export async function extractPdfText(file: File): Promise<{ text: string; pages: number }> {
   if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) throw new Error("请选择 PDF 文件");
-  const pdfjs = await import("pdfjs-dist");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const data = new Uint8Array(await file.arrayBuffer());
   const pdf = await pdfjs.getDocument({ data }).promise;
   const chunks: string[] = [];
