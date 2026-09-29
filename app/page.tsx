@@ -66,6 +66,7 @@ export default function Home() {
   const [updateInfo, setUpdateInfo] = useState<UpdateManifest | null>(null);
   const [updateChecking, setUpdateChecking] = useState(false);
   const [migrationNotice, setMigrationNotice] = useState("");
+  const [backupBusy, setBackupBusy] = useState(false);
 
   useEffect(() => {
     const initial = load();
@@ -95,11 +96,63 @@ export default function Home() {
   const recoverLegacy = () => {
     const legacy = findLegacyStore();
     if (!legacy) {
-      setMigrationNotice("没有找到可恢复的 V0.5/V0.4 数据。可能是旧版本数据已被系统清除。");
+      setMigrationNotice("没有找到旧版本本地数据。若你曾卸载旧 APK 或系统清除了应用数据，本机 localStorage 已不存在，不能凭空恢复。");
       return;
     }
     setStore(legacy);
     setMigrationNotice("已恢复旧版本数据，并同步到 V0.6。");
+  };
+
+  const exportBackup = () => {
+    const payload = {
+      format: "personal-learning-os-backup",
+      version: APP_VERSION,
+      exportedAt: new Date().toISOString(),
+      store,
+      messages,
+      memory,
+      supervisor,
+      gateway,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `self-disciplined-backup-${today()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMigrationNotice("备份文件已生成。以后换 APK 前先导出一次，就不用再赌 localStorage 的命运。");
+  };
+
+  const importBackup = async (file: File) => {
+    setBackupBusy(true);
+    try {
+      const parsed = JSON.parse(await file.text());
+      const imported = parsed?.store as Store;
+      if (!imported || !Array.isArray(imported.tasks) || !Array.isArray(imported.courses)) {
+        throw new Error("这不是有效的自律系统备份文件。");
+      }
+      setStore({
+        ...blank,
+        ...imported,
+        goals: imported.goals || [],
+        courses: imported.courses || [],
+        tasks: imported.tasks || [],
+        sessions: imported.sessions || [],
+        reviews: imported.reviews || [],
+        schedule: imported.schedule || [],
+        availability: imported.availability || {},
+      });
+      if (Array.isArray(parsed.messages)) setMessages(parsed.messages);
+      if (parsed.memory) setMemory(parsed.memory);
+      if (parsed.supervisor) setSupervisor(parsed.supervisor);
+      if (parsed.gateway) setGateway(parsed.gateway);
+      setMigrationNotice("备份已恢复到 V0.6。");
+    } catch (err) {
+      setMigrationNotice(err instanceof Error ? err.message : "备份恢复失败。");
+    } finally {
+      setBackupBusy(false);
+    }
   };
 
   const available = store.availability[date] ?? 120;
@@ -208,9 +261,17 @@ export default function Home() {
           <button onClick={() => { window.location.href = "/course"; }}>打开课程知识库 · 导入 PDF</button>
         </div>
         <div className="card permission-card">
-          <p className="eyebrow">数据恢复</p><h3>找回 V0.5 数据</h3>
-          <p>如果升级后任务、课程或目标消失，先尝试从旧版本本地数据恢复。恢复不会上传数据。</p>
-          <button className="ghost" onClick={recoverLegacy}>恢复旧版本数据</button>
+          <p className="eyebrow">数据恢复</p><h3>真正的数据备份 / 恢复</h3>
+          <p>先扫描旧版本本地数据；如果旧数据已经被卸载清掉，就用下面的 JSON 备份恢复。文件只在本机处理。</p>
+          <div className="gateway-row">
+            <button onClick={recoverLegacy}>扫描并恢复旧版本</button>
+            <button className="ghost" onClick={exportBackup}>导出当前数据</button>
+          </div>
+          <input id="backup-input" type="file" accept="application/json,.json" style={{display:"none"}} disabled={backupBusy}
+            onChange={e => { const f=e.target.files?.[0]; if(f) void importBackup(f); e.target.value=""; }} />
+          <label htmlFor="backup-input" style={{display:"block",marginTop:10,padding:"12px",border:"1px dashed #888",borderRadius:10,textAlign:"center",cursor:"pointer"}}>
+            {backupBusy ? "正在恢复…" : "📦 从 JSON 备份恢复"}
+          </label>
         </div>
         <div className="card permission-card">
           <p className="eyebrow">应用更新</p><h3>当前版本 V0.6.0</h3>
