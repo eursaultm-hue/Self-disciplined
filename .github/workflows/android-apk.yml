@@ -7,6 +7,7 @@ on:
       - main
       - feature/ai-learning-os-v06
       - feature/ai-learning-os-v07-final
+      - feature/ai-learning-os-v08-knowledge-hub
   pull_request:
     branches:
       - main
