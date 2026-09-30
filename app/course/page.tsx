@@ -1,11 +1,12 @@
 "use client";
 
 import { ChangeEvent, useEffect, useState } from "react";
-import { CourseDocument, CourseSection, KnowledgePoint, COURSE_KNOWLEDGE_KEY, extractPdfText, inferKnowledgePoints, parseSections } from "../../lib/courseKnowledge";
-import { id } from "../../lib/domain";
+import { CourseDocument, CourseSection, KnowledgePoint, CourseKnowledgeDB, COURSE_KNOWLEDGE_KEY, extractPdfText, inferKnowledgePoints, parseSections } from "../../lib/courseKnowledge";
+import { id, Task, today } from "../../lib/domain";
+import { buildReviewTask, defaultReviewState, scheduleReview } from "../../lib/learningEngine";
 
-type DB = { documents: CourseDocument[]; sections: CourseSection[]; points: KnowledgePoint[] };
-const blank: DB = { documents: [], sections: [], points: [] };
+type DB = CourseKnowledgeDB;
+const blank: DB = { documents: [], sections: [], points: [], reviews: [] };
 
 export default function CourseWorkspace() {
   const [db, setDb] = useState<DB>(blank);
@@ -17,7 +18,7 @@ export default function CourseWorkspace() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   useEffect(() => {
-    try { setDb(JSON.parse(localStorage.getItem(COURSE_KNOWLEDGE_KEY) || "null") || blank); } catch {}
+    try { const raw=JSON.parse(localStorage.getItem(COURSE_KNOWLEDGE_KEY) || "null"); setDb({...blank,...raw,reviews:raw?.reviews||[]}); } catch {}
   }, []);
   useEffect(() => {
     localStorage.setItem(COURSE_KNOWLEDGE_KEY, JSON.stringify(db));
@@ -56,10 +57,13 @@ export default function CourseWorkspace() {
   const current = db.documents.find(d => d.id === selected);
   const currentSections = db.sections.filter(s => s.documentId === selected);
   const currentPoints = db.points.filter(p => currentSections.some(s => s.id === p.sectionId));
+  const reviewFor = (point: KnowledgePoint) => db.reviews.find(r => r.knowledgePointId === point.id) || defaultReviewState(point.id);
+  const setReview = (point: KnowledgePoint, success: boolean) => { const next=scheduleReview(reviewFor(point),success); setDb(old=>({...old,reviews:[...old.reviews.filter(r=>r.knowledgePointId!==point.id),next]})); };
+  const createTask = (point: KnowledgePoint) => { const state=reviewFor(point); const task=buildReviewTask(point,state); try { const key="personal-learning-os-v07"; const old=JSON.parse(localStorage.getItem(key)||"null")||JSON.parse(localStorage.getItem("personal-learning-os-v06")||"null")||{goals:[],courses:[],tasks:[],sessions:[],reviews:[],schedule:[],availability:{}}; old.tasks=[...(old.tasks||[]),task]; localStorage.setItem(key,JSON.stringify(old)); setMessage("已把该知识点加入今日任务池。"); } catch { setMessage("任务创建失败，请稍后重试。"); } };
 
   return <main className="shell">
     <header className="topbar">
-      <div><p className="eyebrow">PERSONAL LEARNING OS · V0.6</p><h1>课程知识库 <span>PDF → 知识点</span></h1><p className="sub">把你真正上课用的 PDF 变成可管理的课程结构，而不是把文件丢进一个黑箱。</p></div>
+      <div><p className="eyebrow">PERSONAL LEARNING OS · V0.7</p><h1>课程知识库 <span>PDF → 知识点</span></h1><p className="sub">把你真正上课用的 PDF 变成可管理的课程结构，而不是把文件丢进一个黑箱。</p></div>
       <button onClick={() => { window.location.href = "/"; }}>返回 AI 管家</button>
     </header>
 
@@ -95,7 +99,7 @@ export default function CourseWorkspace() {
         {current ? <>
           <div className="card"><p className="eyebrow">DOCUMENT</p><h2>{current.name}</h2><p>{current.pages} 页 · {currentSections.length} 个结构段 · {currentPoints.length} 个知识点</p></div>
           <div className="card"><h3>结构</h3>{currentSections.length ? currentSections.slice(0,40).map(s => <div key={s.id} style={{padding:"10px 0",borderBottom:"1px solid #ddd"}}><b>{s.order + 1}. {s.title}</b><p className="hint">{s.text.slice(0,280)}{s.text.length>280?"…":""}</p></div>) : <p className="empty">暂未识别章节结构。</p>}</div>
-          <div className="card"><h3>知识点候选</h3>{currentPoints.length ? currentPoints.map(p => <div key={p.id} style={{padding:"9px 0",borderBottom:"1px solid #ddd"}}><b>{p.title}</b><small> · {p.type} · 重要度 {p.importance}</small></div>) : <p className="empty">暂未识别。当前解析器会识别 Définition / Théorème / Propriété / Formule / Exemple 等标题；普通正文会保留在结构里。</p>}</div>
+          <div className="card"><h3>知识点与复习</h3>{currentPoints.length ? currentPoints.map(p => { const r=reviewFor(p); return <div key={p.id} style={{padding:"12px 0",borderBottom:"1px solid #ddd"}}><b>{p.title}</b><small> · {p.type} · 重要度 {p.importance} · 状态 {r.status} · {r.reviewDueAt?`下次复习 ${r.reviewDueAt}`:"尚未安排复习"}</small><div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}><button onClick={()=>setReview(p,true)}>✓ 我会了</button><button className="ghost" onClick={()=>setReview(p,false)}>✕ 还不会</button><button className="ghost" onClick={()=>createTask(p)}>加入今日任务</button></div></div>; }) : <p className="empty">暂未识别。当前解析器会识别 Définition / Théorème / Propriété / Formule / Exemple 等标题；普通正文会保留在结构里。</p>}</div>
           <div className="card"><h3>原文预览</h3><pre style={{whiteSpace:"pre-wrap",maxHeight:420,overflow:"auto",fontSize:13}}>{current.extractedText.slice(0,12000)}{current.extractedText.length>12000?"\n…（已截断预览）":""}</pre></div>
         </> : <div className="card"><h2>课程资料工作台</h2><p>这里会逐步形成：PDF → Chapitre/Section → Définition/Théorème/Propriété/Formule → 知识点 → 学习任务 → 掌握度。</p><div className="notice">当前最先要做的就是上面的「选择 PDF 并导入」。</div></div>}
       </div>
