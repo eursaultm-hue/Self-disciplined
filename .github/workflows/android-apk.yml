@@ -70,4 +70,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: self-disciplined-apk-v0.7.0
-          path: self-disciplined-v0.6.0.apk
+          path: self-disciplined-v0.7.0.apk
