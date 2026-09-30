@@ -199,7 +199,7 @@ export default function Home() {
   return <main className="shell">
     <header className="topbar">
       <div>
-        <p className="eyebrow">PERSONAL LEARNING OS · V0.7</p>
+        <p className="eyebrow">PERSONAL LEARNING OS · V0.8</p>
         <h1>自律 <span>AI 管家</span></h1>
         <p className="sub">你负责告诉我现实发生了什么，我负责把它变成可执行的下一步。</p>
       </div>
@@ -276,11 +276,11 @@ export default function Home() {
           </label>
         </div>
         <div className="card permission-card">
-          <p className="eyebrow">应用更新</p><h3>当前版本 V0.7.0</h3>
-          <p>{updateChecking ? "正在检查…" : updateInfo ? `发现新版本 ${updateInfo.version}` : "当前已是最新版本，或暂时没有可用更新。"}</p>
-          <button onClick={async () => { setUpdateChecking(true); setUpdateInfo(await checkForUpdate()); setUpdateChecking(false); }}>检查更新</button>
+          <p className="eyebrow">应用更新</p><h3>当前版本 {APP_VERSION}</h3>
+          <p>{updateChecking ? "正在检查…" : updateInfo ? `发现新版本 ${updateInfo.version}` : "点击检查更新后，会从官方更新清单读取最新版本。"}</p>
+          <button onClick={async () => { setUpdateChecking(true); try { setUpdateInfo(await checkForUpdate()); } finally { setUpdateChecking(false); } }}>检查更新</button>
           {updateInfo && <button className="ghost" onClick={() => { window.location.href = updateInfo.downloadUrl; }}>前往更新</button>}
-          <small>更新通道已接入，但真正的一键覆盖安装还需要稳定 APK 下载地址和持久签名。</small>
+          <small>更新检查读取 GitHub 官方更新清单；发现新版本后可直接打开 APK 下载页。安装仍由 Android 系统确认，当前版本不伪装成“静默更新”。</small>
         </div>
         <div className="card mini-card"><small>今日容量</small><strong>{available} 分钟</strong><span>已安排 {plannedMinutes} 分钟</span></div>
         <div className="card mini-card"><small>最近记忆</small><p>{memory.summary || "还没有。你说的第一句话就会成为系统的一部分。"}</p></div>
