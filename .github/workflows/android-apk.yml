@@ -13,7 +13,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
@@ -56,7 +56,7 @@ jobs:
           from pathlib import Path
           p = Path("app/build.gradle")
           s = p.read_text()
-          s = s.replace("versionCode 1", "versionCode 7").replace('versionName "1.0"', 'versionName "0.7.0"')
+          s = s.replace("versionCode 1", "versionCode 8").replace('versionName "1.0"', 'versionName "0.8.0"')
           p.write_text(s)
           PY
 
@@ -65,10 +65,22 @@ jobs:
         run: ./gradlew assembleDebug
 
       - name: Prepare APK artifact
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk self-disciplined-v0.7.0.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk self-disciplined-v0.8.0.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: self-disciplined-apk-v0.7.0
-          path: self-disciplined-v0.7.0.apk
+          name: self-disciplined-apk-v0.8.0
+          path: self-disciplined-v0.8.0.apk
+
+      - name: Publish GitHub release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/ai-learning-os-v08-knowledge-hub'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v0.8.0"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" self-disciplined-v0.8.0.apk --title "自律ROBOT V0.8.0" --notes "V0.8 独立课程知识库入口与更新通道。"
+          else
+            gh release upload "$TAG" self-disciplined-v0.8.0.apk --clobber
+          fi
