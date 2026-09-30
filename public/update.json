@@ -1,6 +1,10 @@
 {
-  "version": "0.7.0",
-  "versionCode": 7,
+  "version": "0.8.0",
+  "versionCode": 8,
   "downloadUrl": "https://github.com/eursaultm-hue/Self-disciplined/releases/latest",
-  "notes": ["V0.7 学习引擎","知识点掌握与轻量 SRS 复习","知识点可直接生成学习任务","V0.6 数据迁移与 JSON 备份兼容"]
+  "notes": [
+    "V0.8 独立课程知识库入口",
+    "知识库与学习任务链路继续打通",
+    "保留 V0.7 学习引擎、SRS 与数据备份"
+  ]
 }
