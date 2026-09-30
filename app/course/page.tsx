@@ -45,7 +45,7 @@ export default function CourseWorkspace() {
       const sections = parseSections(text).map(s => ({ ...s, id: id(), documentId }));
       const points = sections.flatMap(s => inferKnowledgePoints(s, courseId || undefined));
       const doc: CourseDocument = { id: documentId, courseId: courseId || undefined, name: file.name, size: file.size, pages, importedAt: new Date().toISOString(), extractedText: text };
-      setDb(old => ({ documents: [...old.documents, doc], sections: [...old.sections, ...sections], points: [...old.points, ...points] }));
+      setDb(old => ({ documents: [...old.documents, doc], sections: [...old.sections, ...sections], points: [...old.points, ...points], reviews: old.reviews }));
       setSelected(documentId);
       setPendingFile(null);
       setMessage(`导入成功：${pages} 页，${sections.length} 个结构段，${points.length} 个知识点候选。已写入本机知识库。`);
