@@ -1,26 +1,22 @@
 name: Build Android APK
 
-# Pushes to the packaging branch intentionally trigger a real APK build.
-
 on:
   workflow_dispatch:
   push:
     branches:
-      - feature/ai-steward-v03
       - main
-      - feature/ai-agent-v04\n      - feature/ai-learning-os-v06
+      - feature/ai-learning-os-v06
+      - feature/v08-stabilization
   pull_request:
     branches:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    env:
-      HAS_ANDROID_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,7 +55,7 @@ jobs:
           from pathlib import Path
           p = Path("app/build.gradle")
           s = p.read_text()
-          s = s.replace("versionCode 1", "versionCode 6").replace('versionName "1.0"', 'versionName "0.6.0"')
+          s = s.replace("versionCode 1", "versionCode 8").replace('versionName "1.0"', 'versionName "0.8.0"')
           p.write_text(s)
           PY
 
@@ -68,11 +64,22 @@ jobs:
         run: ./gradlew assembleDebug
 
       - name: Prepare APK artifact
-        working-directory: android
-        run: cp app/build/outputs/apk/debug/app-debug.apk ../self-disciplined-v0.6.0.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk self-disciplined-v0.8.0.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: self-disciplined-apk-v0.6.0
-          path: self-disciplined-v0.5.0.apk
+          name: self-disciplined-apk-v0.8.0
+          path: self-disciplined-v0.8.0.apk
+
+      - name: Publish GitHub release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v0.8.0"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" self-disciplined-v0.8.0.apk --title "自律ROBOT V0.8.0" --notes "V0.8 独立课程知识库入口与更新通道。"
+          else
+            gh release upload "$TAG" self-disciplined-v0.8.0.apk --clobber
+          fi
