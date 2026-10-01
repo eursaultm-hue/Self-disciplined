@@ -54,7 +54,7 @@ jobs:
           from pathlib import Path
           p = Path("app/build.gradle")
           s = p.read_text()
-          s = s.replace("versionCode 1", "versionCode 8").replace('versionName "1.0"', 'versionName "0.8.0"')
+          s = s.replace("versionCode 1", "versionCode 9").replace('versionName "1.0"', 'versionName "0.8.1"')
           p.write_text(s)
           PY
 
@@ -63,12 +63,12 @@ jobs:
         run: ./gradlew assembleDebug
 
       - name: Prepare APK artifact
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk self-disciplined-v0.8.0.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk self-disciplined-v0.8.1.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: self-disciplined-apk-v0.8.0
+          name: self-disciplined-apk-v0.8.1
           path: self-disciplined-v0.8.0.apk
 
       - name: Publish GitHub release
@@ -76,9 +76,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v0.8.0"
+          TAG="v0.8.1"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" self-disciplined-v0.8.0.apk --title "自律ROBOT V0.8.0" --notes "V0.8 独立课程知识库入口与更新通道。"
+            gh release create "$TAG" self-disciplined-v0.8.0.apk --title "自律ROBOT V0.8.1" --notes "V0.8.1 知识点、SRS、任务与今日计划闭环。"
           else
             gh release upload "$TAG" self-disciplined-v0.8.0.apk --clobber
           fi
