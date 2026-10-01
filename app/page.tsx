@@ -7,6 +7,7 @@ import { buildMorningBrief, stewardReply, StewardAction, StewardMemory, StewardM
 import { askGateway, defaultGatewayConfig, GatewayConfig } from "../lib/gateway";
 import { defaultSupervisorSettings, enableSupervisor, SupervisorSettings } from "../lib/supervisor";
 import { APP_VERSION, checkForUpdate, UpdateManifest } from "../lib/update";
+import { COURSE_KNOWLEDGE_KEY } from "../lib/courseKnowledge";
 
 const key = "personal-learning-os-store";
 const STORE_SCHEMA_VERSION = 8;
@@ -177,8 +178,7 @@ export default function Home() {
     const decision = await askGateway(gateway, input, store, memory, fallback);
     update(s => applyStewardActions(s, decision.actions));
     setMessages(prev => [...prev, { role: "steward", content: decision.reply, at: new Date().toISOString() }]);
-    setMemory(decision.memory);
-    setAgentSource(decision.source);
+    setMemory(decision.memory);    setAgentSource(decision.source);
     setAgentBusy(false);
   };
 
@@ -192,8 +192,10 @@ export default function Home() {
     const recordedAt = new Date().toISOString();
     update(s => ({
       ...s,
-      sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, startedAt: recordedAt, endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
-      tasks: s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS", actualMinutes: t.actualMinutes + 25 } : t)
+      sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, knowledgePointId: task.knowledgePointId, startedAt: recordedAt, endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
+      tasks: s.tasks.some(t => t.id === task.id)
+        ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS", actualMinutes: t.actualMinutes + 25 } : t)
+        : [...s.tasks, { ...task, status: "IN_PROGRESS", actualMinutes: 25 }]
     }));
   };
 
@@ -357,8 +359,7 @@ function DataView({ store, update, date }: { store: Store; update: (fn: (old: St
   </section>;
 }
 
-function ReviewView({ date, plannedMinutes, actualToday, store, update }: { date: string; plannedMinutes: number; actualToday: number; store: Store; update: (fn: (old: Store) => Store) => void }) {
-  const save = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = new FormData(e.currentTarget); const review: DailyReview = { date, wins: String(f.get("wins") || ""), blockers: String(f.get("blockers") || ""), reflection: String(f.get("reflection") || ""), tomorrowAdjustment: String(f.get("adjustment") || ""), energyLevel: Number(f.get("energy") || 3) }; update(s => ({ ...s, reviews: [...s.reviews.filter(r => r.date !== date), review] })); };
+function ReviewView({ date, plannedMinutes, actualToday, store, update }: { date: string; plannedMinutes: number; actualToday: number; store: Store; update: (fn: (old: Store) => Store) => void }) {  const save = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = new FormData(e.currentTarget); const review: DailyReview = { date, wins: String(f.get("wins") || ""), blockers: String(f.get("blockers") || ""), reflection: String(f.get("reflection") || ""), tomorrowAdjustment: String(f.get("adjustment") || ""), energyLevel: Number(f.get("energy") || 3) }; update(s => ({ ...s, reviews: [...s.reviews.filter(r => r.date !== date), review] })); };
   return <section className="two"><div><p className="eyebrow">REVIEW</p><h2>今天结束时，告诉管家现实。</h2><div className="stats"><Stat label="计划" value={`${plannedMinutes} 分钟`} /><Stat label="实际" value={`${actualToday} 分钟`} /></div><div className="notice">以后这里会由 AI 主动追问。现在保留一个极短的兜底入口，避免系统假装自己知道你发生了什么。</div><p className="hint">历史复盘：{store.reviews.length} 天</p></div><form className="card form" onSubmit={save}><textarea name="wins" placeholder="今天发生了什么？"/><textarea name="blockers" placeholder="哪里卡住了？"/><label>精力 1–5 <input name="energy" type="number" min="1" max="5" defaultValue="3"/></label><textarea name="adjustment" placeholder="明天有什么变化？"/><button>让管家记住</button></form></section>;
 }
 
