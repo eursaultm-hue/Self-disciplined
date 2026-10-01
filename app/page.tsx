@@ -300,7 +300,7 @@ export default function Home() {
   </main>;
 }
 
-function KnowledgeHubView() { return <section><div className="section-head"><div><p className="eyebrow">KNOWLEDGE HUB</p><h2>课程知识库</h2><p className="hint">课程资料、知识点、复习与任务的统一入口。</p></div></div><div className="card"><p>课程知识库现在是一级栏目。下面进入完整的 PDF → 知识点 → 复习 → 任务工作台。</p><button onClick={() => { window.location.href = "/course"; }}>进入课程工作台</button></div></section>; }
+function KnowledgeHubView() { return <section><div className="section-head"><div><p className="eyebrow">KNOWLEDGE HUB</p><h2>课程知识库</h2><p className="hint">课程资料、知识点、复习与任务的统一入口。</p></div></div><div className="card"><p>课程知识库现在是一级栏目。下面进入完整的 PDF → 知识点 → 复习 → 任务工作台。</p><button onClick={() => { window.location.href = "/course/"; }}>进入课程工作台</button></div></section>; }
 
 function applyStewardActions(store: Store, actions: StewardAction[]): Store {
   let next = store;
