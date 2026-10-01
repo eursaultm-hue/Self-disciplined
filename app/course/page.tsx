@@ -15,14 +15,16 @@ export default function CourseWorkspace() {
   const [message, setMessage] = useState("PDF 会先在设备本地提取文字，不上传文件。");
   const [selected, setSelected] = useState<string>("");
   const [fileName, setFileName] = useState("");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);\n  const [loaded, setLoaded] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     try { let raw=JSON.parse(localStorage.getItem(COURSE_KNOWLEDGE_KEY) || "null"); if (!raw) for (const legacyKey of LEGACY_COURSE_KNOWLEDGE_KEYS) { const legacy=JSON.parse(localStorage.getItem(legacyKey)||"null"); if (legacy) { raw=legacy; localStorage.setItem(COURSE_KNOWLEDGE_KEY, JSON.stringify(legacy)); break; } } setDb({...blank,...raw,reviews:raw?.reviews||[]}); } catch {} finally { setLoaded(true); }
   }, []);
   useEffect(() => {
+    if (!loaded) return;
     localStorage.setItem(COURSE_KNOWLEDGE_KEY, JSON.stringify(db));
-  }, [db]);
+  }, [db, loaded]);
 
   const choosePdf = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
