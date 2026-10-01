@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useState } from "react";
-import { CourseDocument, CourseSection, KnowledgePoint, CourseKnowledgeDB, COURSE_KNOWLEDGE_KEY, extractPdfText, inferKnowledgePoints, parseSections } from "../../lib/courseKnowledge";
+import { CourseDocument, CourseSection, KnowledgePoint, CourseKnowledgeDB, COURSE_KNOWLEDGE_KEY, LEGACY_COURSE_KNOWLEDGE_KEYS, extractPdfText, inferKnowledgePoints, parseSections } from "../../lib/courseKnowledge";
 import { id, Task, today } from "../../lib/domain";
 import { buildReviewTask, defaultReviewState, scheduleReview } from "../../lib/learningEngine";
 
@@ -18,7 +18,7 @@ export default function CourseWorkspace() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   useEffect(() => {
-    try { const raw=JSON.parse(localStorage.getItem(COURSE_KNOWLEDGE_KEY) || "null"); setDb({...blank,...raw,reviews:raw?.reviews||[]}); } catch {}
+    try { let raw=JSON.parse(localStorage.getItem(COURSE_KNOWLEDGE_KEY) || "null"); if (!raw) for (const legacyKey of LEGACY_COURSE_KNOWLEDGE_KEYS) { const legacy=JSON.parse(localStorage.getItem(legacyKey)||"null"); if (legacy) { raw=legacy; localStorage.setItem(COURSE_KNOWLEDGE_KEY, JSON.stringify(legacy)); break; } } setDb({...blank,...raw,reviews:raw?.reviews||[]}); } catch {}
   }, []);
   useEffect(() => {
     localStorage.setItem(COURSE_KNOWLEDGE_KEY, JSON.stringify(db));
@@ -59,7 +59,7 @@ export default function CourseWorkspace() {
   const currentPoints = db.points.filter(p => currentSections.some(s => s.id === p.sectionId));
   const reviewFor = (point: KnowledgePoint) => db.reviews.find(r => r.knowledgePointId === point.id) || defaultReviewState(point.id);
   const setReview = (point: KnowledgePoint, success: boolean) => { const next=scheduleReview(reviewFor(point),success); setDb(old=>({...old,reviews:[...old.reviews.filter(r=>r.knowledgePointId!==point.id),next]})); };
-  const createTask = (point: KnowledgePoint) => { const state=reviewFor(point); const task=buildReviewTask(point,state); try { const key="personal-learning-os-v07"; const old=JSON.parse(localStorage.getItem(key)||"null")||JSON.parse(localStorage.getItem("personal-learning-os-v06")||"null")||{goals:[],courses:[],tasks:[],sessions:[],reviews:[],schedule:[],availability:{}}; old.tasks=[...(old.tasks||[]),task]; localStorage.setItem(key,JSON.stringify(old)); setMessage("已把该知识点加入今日任务池。"); } catch { setMessage("任务创建失败，请稍后重试。"); } };
+  const createTask = (point: KnowledgePoint) => { const state=reviewFor(point); const task=buildReviewTask(point,state); try { const key="personal-learning-os-store"; const old=JSON.parse(localStorage.getItem(key)||"null")||JSON.parse(localStorage.getItem("personal-learning-os-v07")||"null")||JSON.parse(localStorage.getItem("personal-learning-os-v06")||"null")||{goals:[],courses:[],tasks:[],sessions:[],reviews:[],schedule:[],availability:{}}; old.tasks=[...(old.tasks||[]),task]; localStorage.setItem(key,JSON.stringify(old)); setMessage("已把该知识点加入今日任务池。"); } catch { setMessage("任务创建失败，请稍后重试。"); } };
 
   return <main className="shell">
     <header className="topbar">
