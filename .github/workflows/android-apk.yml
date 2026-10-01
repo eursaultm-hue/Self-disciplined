@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - feature/ai-learning-os-v06
+      - feature/v08-stabilization
   pull_request:
     branches:
       - main
