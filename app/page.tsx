@@ -261,7 +261,7 @@ export default function Home() {
           <button onClick={requestNotification}>{notificationEnabled ? "✓ 通知已开启" : "开启通知权限"}</button><button className="ghost" onClick={async () => { const ok = await enableSupervisor(supervisor, true); setNotificationEnabled(ok); }}>发送测试通知</button>
         </div>
         <div className="card permission-card">
-          <p className="eyebrow">V0.7 · 课程知识库</p><h3>PDF → 知识点 → 复习 → 任务</h3>
+          <p className="eyebrow">V0.8 · 课程知识库</p><h3>课程知识库已独立为一级栏目</h3>
           <p>把数学分析、线代、电子学等课程 PDF 导入设备本地；知识点现在可以标记掌握状态、安排轻量 SRS 复习，并直接进入今日任务池。</p>
           <button onClick={() => setView("knowledge")}>打开课程知识库</button>
         </div>
