@@ -8,10 +8,13 @@ import { askGateway, defaultGatewayConfig, GatewayConfig } from "../lib/gateway"
 import { defaultSupervisorSettings, enableSupervisor, SupervisorSettings } from "../lib/supervisor";
 import { APP_VERSION, checkForUpdate, UpdateManifest } from "../lib/update";
 
-const key = "personal-learning-os-v07";
-const legacyKeys = ["personal-learning-os-v06","personal-learning-os-v05", "personal-learning-os-v04", "personal-learning-os-v03", "personal-learning-os-v02", "personal-learning-os-v01"];
+const key = "personal-learning-os-store";
+const STORE_SCHEMA_VERSION = 8;
+const legacyKeys = ["personal-learning-os-v07","personal-learning-os-v06","personal-learning-os-v05", "personal-learning-os-v04", "personal-learning-os-v03", "personal-learning-os-v02", "personal-learning-os-v01"];
 const blank: Store = { goals: [], courses: [], tasks: [], sessions: [], reviews: [], schedule: [], availability: {} };
 const labels: Record<TaskStatus, string> = { TODO: "待开始", IN_PROGRESS: "进行中", DONE: "已完成", OVERDUE: "已逾期", SKIPPED: "已跳过", BLOCKED: "受阻", CANCELLED: "已取消" };
+
+function normalizeStore(store: Store): Store { return { ...blank, ...store, goals: store.goals || [], courses: store.courses || [], tasks: store.tasks || [], sessions: store.sessions || [], reviews: store.reviews || [], schedule: store.schedule || [], availability: store.availability || {} }; }
 
 function hasStoreData(store: Store) {
   return store.goals.length > 0 || store.courses.length > 0 || store.tasks.length > 0 || store.sessions.length > 0 || store.reviews.length > 0 || store.schedule.length > 0 || Object.keys(store.availability).length > 0;
@@ -21,7 +24,7 @@ function readStore(raw: string | null): Store | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Store;
-    return parsed && typeof parsed === "object" ? parsed : null;
+    return parsed && typeof parsed === "object" ? normalizeStore(parsed) : null;
   } catch { return null; }
 }
 
@@ -53,7 +56,7 @@ export default function Home() {
   const [store, setStore] = useState<Store>(blank);
   const [ready, setReady] = useState(false);
   const [date, setDate] = useState(today());
-  const [view, setView] = useState<"home" | "today" | "data" | "review">("home");
+  const [view, setView] = useState<"home" | "today" | "knowledge" | "data" | "review">("home");
   const [messages, setMessages] = useState<StewardMessage[]>([]);
   const [memory, setMemory] = useState<StewardMemory>({ summary: "", updatedAt: new Date().toISOString() });
   const [chat, setChat] = useState("");
@@ -86,7 +89,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!ready) return;
-    localStorage.setItem(key, JSON.stringify(store));
+    localStorage.setItem(key, JSON.stringify({ ...store, schemaVersion: STORE_SCHEMA_VERSION }));
     localStorage.setItem("personal-learning-os-v03-chat", JSON.stringify(messages.slice(-80)));
     localStorage.setItem("personal-learning-os-v05-memory", JSON.stringify(memory));
     localStorage.setItem("personal-learning-os-v05-supervisor", JSON.stringify(supervisor));
@@ -100,7 +103,7 @@ export default function Home() {
       return;
     }
     setStore(legacy);
-    setMigrationNotice("已恢复旧版本数据，并同步到 V0.7。");
+    setMigrationNotice("已恢复旧版本数据，并同步到统一数据存储。");
   };
 
   const exportBackup = () => {
@@ -113,7 +116,7 @@ export default function Home() {
       memory,
       supervisor,
       gateway,
-      courseKnowledge: localStorage.getItem("personal-learning-os-v07-knowledge") || localStorage.getItem("personal-learning-os-v06-knowledge"),
+      courseKnowledge: localStorage.getItem("personal-learning-os-knowledge") || localStorage.getItem("personal-learning-os-v07-knowledge") || localStorage.getItem("personal-learning-os-v06-knowledge"),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -148,8 +151,8 @@ export default function Home() {
       if (parsed.memory) setMemory(parsed.memory);
       if (parsed.supervisor) setSupervisor(parsed.supervisor);
       if (parsed.gateway) setGateway(parsed.gateway);
-      if (parsed.courseKnowledge) localStorage.setItem("personal-learning-os-v07-knowledge", String(parsed.courseKnowledge));
-      setMigrationNotice("备份已恢复到 V0.7。课程知识库也会随备份一起恢复。");
+      if (parsed.courseKnowledge) localStorage.setItem("personal-learning-os-knowledge", String(parsed.courseKnowledge));
+      setMigrationNotice("备份已恢复。课程知识库也会随备份一起恢复。");
     } catch (err) {
       setMigrationNotice(err instanceof Error ? err.message : "备份恢复失败。");
     } finally {
@@ -203,7 +206,7 @@ export default function Home() {
         <h1>自律 <span>AI 管家</span></h1>
         <p className="sub">你负责告诉我现实发生了什么，我负责把它变成可执行的下一步。</p>
       </div>
-      <nav>{([["home", "管家"], ["today", "今日计划"], ["data", "我的系统"], ["review", "复盘"]] as const).map(([v, n]) =>
+      <nav>{([["home", "管家"], ["today", "今日计划"], ["knowledge", "课程知识库"], ["data", "我的系统"], ["review", "复盘"]] as const).map(([v, n]) =>
         <button key={v} className={view === v ? "active" : ""} onClick={() => setView(v)}>{n}</button>
       )}</nav>
     </header>
@@ -260,7 +263,7 @@ export default function Home() {
         <div className="card permission-card">
           <p className="eyebrow">V0.7 · 课程知识库</p><h3>PDF → 知识点 → 复习 → 任务</h3>
           <p>把数学分析、线代、电子学等课程 PDF 导入设备本地；知识点现在可以标记掌握状态、安排轻量 SRS 复习，并直接进入今日任务池。</p>
-          <button onClick={() => { window.location.href = "/course"; }}>打开课程知识库 · 导入 PDF</button>
+          <button onClick={() => setView("knowledge")}>打开课程知识库</button>
         </div>
         <div className="card permission-card">
           <p className="eyebrow">数据恢复</p><h3>真正的数据备份 / 恢复</h3>
@@ -288,11 +291,14 @@ export default function Home() {
       </aside>
     </section>}
 
+    {view === "knowledge" && <KnowledgeHubView />}
     {view === "today" && <TodayView date={date} setDate={setDate} available={available} plan={plan} update={update} record25={record25} />}
     {view === "data" && <DataView store={store} update={update} date={date} />}
     {view === "review" && <ReviewView date={date} plannedMinutes={plannedMinutes} actualToday={actualToday} store={store} update={update} />}
   </main>;
 }
+
+function KnowledgeHubView() { return <section><div className="section-head"><div><p className="eyebrow">KNOWLEDGE HUB</p><h2>课程知识库</h2><p className="hint">课程资料、知识点、复习与任务的统一入口。</p></div></div><div className="card"><p>课程知识库现在是一级栏目。下面进入完整的 PDF → 知识点 → 复习 → 任务工作台。</p><button onClick={() => { window.location.href = "/course"; }}>进入课程工作台</button></div></section>; }
 
 function applyStewardActions(store: Store, actions: StewardAction[]): Store {
   let next = store;
