@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {\n  trailingSlash: true,
+const nextConfig = {
+  trailingSlash: true,
   output: "export",
   images: {
     unoptimized: true
