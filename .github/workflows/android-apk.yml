@@ -69,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: self-disciplined-apk-v0.8.1
-          path: self-disciplined-v0.8.0.apk
+          path: self-disciplined-v0.8.1.apk
 
       - name: Publish GitHub release
         if: github.ref == 'refs/heads/main'
@@ -78,7 +78,7 @@ jobs:
         run: |
           TAG="v0.8.1"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" self-disciplined-v0.8.0.apk --title "自律ROBOT V0.8.1" --notes "V0.8.1 知识点、SRS、任务与今日计划闭环。"
+            gh release create "$TAG" self-disciplined-v0.8.1.apk --title "自律ROBOT V0.8.1" --notes "V0.8.1 知识点、SRS、任务与今日计划闭环。"
           else
-            gh release upload "$TAG" self-disciplined-v0.8.0.apk --clobber
+            gh release upload "$TAG" self-disciplined-v0.8.1.apk --clobber
           fi
