@@ -16,13 +16,15 @@ export default function CourseWorkspace() {
   const [selected, setSelected] = useState<string>("");
   const [fileName, setFileName] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    try { let raw=JSON.parse(localStorage.getItem(COURSE_KNOWLEDGE_KEY) || "null"); if (!raw) for (const legacyKey of LEGACY_COURSE_KNOWLEDGE_KEYS) { const legacy=JSON.parse(localStorage.getItem(legacyKey)||"null"); if (legacy) { raw=legacy; localStorage.setItem(COURSE_KNOWLEDGE_KEY, JSON.stringify(legacy)); break; } } setDb({...blank,...raw,reviews:raw?.reviews||[]}); } catch {}
+    try { let raw=JSON.parse(localStorage.getItem(COURSE_KNOWLEDGE_KEY) || "null"); if (!raw) for (const legacyKey of LEGACY_COURSE_KNOWLEDGE_KEYS) { const legacy=JSON.parse(localStorage.getItem(legacyKey)||"null"); if (legacy) { raw=legacy; localStorage.setItem(COURSE_KNOWLEDGE_KEY, JSON.stringify(legacy)); break; } } setDb({...blank,...raw,reviews:raw?.reviews||[]}); } catch {} finally { setLoaded(true); }
   }, []);
   useEffect(() => {
+    if (!loaded) return;
     localStorage.setItem(COURSE_KNOWLEDGE_KEY, JSON.stringify(db));
-  }, [db]);
+  }, [db, loaded]);
 
   const choosePdf = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
@@ -59,11 +61,11 @@ export default function CourseWorkspace() {
   const currentPoints = db.points.filter(p => currentSections.some(s => s.id === p.sectionId));
   const reviewFor = (point: KnowledgePoint) => db.reviews.find(r => r.knowledgePointId === point.id) || defaultReviewState(point.id);
   const setReview = (point: KnowledgePoint, success: boolean) => { const next=scheduleReview(reviewFor(point),success); setDb(old=>({...old,reviews:[...old.reviews.filter(r=>r.knowledgePointId!==point.id),next]})); };
-  const createTask = (point: KnowledgePoint) => { const state=reviewFor(point); const task=buildReviewTask(point,state); try { const key="personal-learning-os-store"; const old=JSON.parse(localStorage.getItem(key)||"null")||JSON.parse(localStorage.getItem("personal-learning-os-v07")||"null")||JSON.parse(localStorage.getItem("personal-learning-os-v06")||"null")||{goals:[],courses:[],tasks:[],sessions:[],reviews:[],schedule:[],availability:{}}; old.tasks=[...(old.tasks||[]),task]; localStorage.setItem(key,JSON.stringify(old)); setMessage("已把该知识点加入今日任务池。"); } catch { setMessage("任务创建失败，请稍后重试。"); } };
+  const createTask = (point: KnowledgePoint) => { const state=reviewFor(point); const task=buildReviewTask(point,state); try { const key="personal-learning-os-store"; const old=JSON.parse(localStorage.getItem(key)||"null")||JSON.parse(localStorage.getItem("personal-learning-os-v07")||"null")||JSON.parse(localStorage.getItem("personal-learning-os-v06")||"null")||{goals:[],courses:[],tasks:[],sessions:[],reviews:[],schedule:[],availability:{}}; const tasks=Array.isArray(old.tasks)?old.tasks:[]; if(tasks.some((t:Task)=>t.knowledgePointId===point.id && t.status!=="DONE")) { setMessage("该知识点已经在任务池里，不重复创建。"); return; } old.tasks=[...tasks,task]; old.schemaVersion=8; localStorage.setItem(key,JSON.stringify(old)); setMessage("已把该知识点加入今日任务池。返回今日计划后会自动纳入。"); } catch { setMessage("任务创建失败，请稍后重试。"); } };
 
   return <main className="shell">
     <header className="topbar">
-      <div><p className="eyebrow">PERSONAL LEARNING OS · V0.8</p><h1>课程知识库 <span>PDF → 知识点</span></h1><p className="sub">把你真正上课用的 PDF 变成可管理的课程结构，而不是把文件丢进一个黑箱。</p></div>
+      <div><p className="eyebrow">PERSONAL LEARNING OS · V0.8.1</p><h1>课程知识库 <span>PDF → 知识点</span></h1><p className="sub">把你真正上课用的 PDF 变成可管理的课程结构，而不是把文件丢进一个黑箱。</p></div>
       <button onClick={() => { window.location.href = "/"; }}>返回 AI 管家</button>
     </header>
 
