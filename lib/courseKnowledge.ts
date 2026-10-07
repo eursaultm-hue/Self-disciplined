@@ -6,4 +6,35 @@ export const COURSE_KNOWLEDGE_KEY="personal-learning-os-knowledge";
 export const LEGACY_COURSE_KNOWLEDGE_KEYS=["personal-learning-os-v07-knowledge","personal-learning-os-v06-knowledge"];
 export function parseSections(text:string):Omit<CourseSection,"id"|"documentId">[]{const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);const heading=/^(chapitre|chapter|section|partie|définition|definition|théorème|theorem|propriété|property|proposition|lem(me)?|exemple|example)\b/i;const sections:Omit<CourseSection,"id"|"documentId">[]=[];let current:Omit<CourseSection,"id"|"documentId">|null=null;let order=0;for(const line of lines){if(heading.test(line)||/^\d+(?:\.\d+)*\s+\S/.test(line)){if(current)sections.push(current);current={title:line.slice(0,160),order:order++,text:line};}else if(current)current.text+="\n"+line;}if(current)sections.push(current);if(!sections.length&&text.trim())sections.push({title:"全文",order:0,text:text.trim()});return sections;}
 export function inferKnowledgePoints(section:CourseSection,courseId?:string):KnowledgePoint[]{const lines=section.text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);const results:KnowledgePoint[]=[];const patterns:Array<[RegExp,KnowledgePoint["type"]]>=[[/^(définition|definition)\b/i,"DEFINITION"],[/^(théorème|theorem|proposition|lemme|lemma)\b/i,"THEOREM"],[/^(propriété|property)\b/i,"PROPERTY"],[/^(formule|formula)\b/i,"FORMULA"],[/^(exemple|example)\b/i,"EXAMPLE"]];for(const line of lines){const match=patterns.find(([re])=>re.test(line));if(match)results.push({id:globalThis.crypto?.randomUUID?.()??`${Date.now()}-${Math.random()}`,courseId,sectionId:section.id,title:line.slice(0,120),type:match[1],importance:match[1]==="THEOREM"||match[1]==="DEFINITION"?3:2,sourceText:line});}return results;}
-export async function extractPdfText(file:File):Promise<{text:string;pages:number}>{if(file.type!=="application/pdf"&&!file.name.toLowerCase().endsWith(".pdf"))throw new Error("请选择 PDF 文件");const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");const data=new Uint8Array(await file.arrayBuffer());const pdf=await pdfjs.getDocument({data}).promise;const chunks:string[]=[];for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){const page=await pdf.getPage(pageNo);const content=await page.getTextContent();const pageText=content.items.map((item)=>("str"in item?item.str:"")).join(" ").replace(/\s+/g," ").trim();chunks.push(`[第 ${pageNo} 页]\n${pageText}`);}return{text:chunks.join("\n\n"),pages:pdf.numPages};}
+export async function extractPdfText(file:File, onProgress?:(page:number,total:number)=>void):Promise<{text:string;pages:number}>{
+  if(file.type!=="application/pdf"&&!file.name.toLowerCase().endsWith(".pdf")) throw new Error("请选择 PDF 文件");
+  if(file.size===0) throw new Error("PDF 文件为空，无法解析");
+  const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const data=new Uint8Array(await file.arrayBuffer());
+  if(!data.length) throw new Error("无法读取 PDF 文件内容");
+  const loadingTask=pdfjs.getDocument({
+    data,
+    disableWorker:true,
+    isEvalSupported:false,
+    useSystemFonts:true,
+  });
+  const timeout=new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("PDF 解析超过 60 秒。可能是扫描版、加密 PDF 或文件过大，请先用普通文本型 PDF 测试。")),60000));
+  const pdf=await Promise.race([loadingTask.promise,timeout]);
+  const chunks:string[]=[];
+  for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
+    const page=await Promise.race([
+      pdf.getPage(pageNo),
+      new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error(`第 ${pageNo} 页解析超时。`)),15000))
+    ]);
+    const content=await Promise.race([
+      page.getTextContent(),
+      new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error(`第 ${pageNo} 页文字提取超时。`)),15000))
+    ]);
+    const pageText=content.items.map((item:any)=>("str"in item?item.str:"")).join(" ").replace(/\\s+/g," ").trim();
+    chunks.push(`[第 ${pageNo} 页]\\n${pageText}`);
+    onProgress?.(pageNo,pdf.numPages);
+  }
+  const text=chunks.join("\\n\\n").trim();
+  if(!text) throw new Error("PDF 已打开，但没有提取到文字。它很可能是扫描/图片型 PDF，目前版本还没有 OCR。");
+  return {text,pages:pdf.numPages};
+}
