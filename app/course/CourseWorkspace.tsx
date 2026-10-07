@@ -17,6 +17,7 @@ export default function CourseWorkspace() {
   const [fileName, setFileName] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [progress, setProgress] = useState("");
 
   useEffect(() => {
     try {
@@ -56,9 +57,13 @@ export default function CourseWorkspace() {
     }
     const file = pendingFile;
     setBusy(true);
-    setMessage("正在读取 PDF，并建立课程结构…");
+    setProgress("");
+    setMessage("正在读取 PDF…");
     try {
-      const { text, pages } = await extractPdfText(file);
+      const { text, pages } = await extractPdfText(file, (page, total) => {
+        setProgress(`正在解析第 ${page}/${total} 页…`);
+        setMessage(`PDF 已打开，正在提取文字：${page}/${total} 页`);
+      });
       const documentId = id();
       const sections = parseSections(text).map(s => ({ ...s, id: id(), documentId }));
       const points = sections.flatMap(s => inferKnowledgePoints(s, courseId || undefined));
@@ -79,8 +84,10 @@ export default function CourseWorkspace() {
       }));
       setSelected(documentId);
       setPendingFile(null);
+      setProgress("");
       setMessage(`导入成功：${pages} 页，${sections.length} 个结构段，${points.length} 个知识点候选。已写入本机知识库。`);
     } catch (err) {
+      setProgress("");
       setMessage(err instanceof Error ? err.message : "PDF 读取失败");
     } finally {
       setBusy(false);
@@ -138,7 +145,7 @@ export default function CourseWorkspace() {
             </button>
           </div>
           <p className="hint">{fileName ? `已选择：${fileName}` : "还没有选择文件。支持 .pdf；扫描版/图片型 PDF 暂不做 OCR。"}</p>
-          <div className="notice">{message}</div>
+          <div className="notice">{message}{progress ? ` ${progress}` : ""}</div>
         </div>
 
         <div className="card">
