@@ -8,7 +8,7 @@ import { askGateway, defaultGatewayConfig, GatewayConfig } from "../lib/gateway"
 import { defaultSupervisorSettings, enableSupervisor, SupervisorSettings } from "../lib/supervisor";
 import { APP_VERSION, checkForUpdate, UpdateManifest } from "../lib/update";
 import { COURSE_KNOWLEDGE_KEY } from "../lib/courseKnowledge";
-import CourseWorkspace from "./course/page";
+import CourseWorkspace from "./course/CourseWorkspace";
 
 const key = "personal-learning-os-store";
 const STORE_SCHEMA_VERSION = 8;
