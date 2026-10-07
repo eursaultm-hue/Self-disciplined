@@ -12,12 +12,12 @@ export async function extractPdfText(file:File, onProgress?:(page:number,total:n
   const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
   const data=new Uint8Array(await file.arrayBuffer());
   if(!data.length) throw new Error("无法读取 PDF 文件内容");
-  const loadingTask=pdfjs.getDocument({
+  const loadingTask=pdfjs.getDocument(({
     data,
     disableWorker:true,
     isEvalSupported:false,
     useSystemFonts:true,
-  });
+  } as any));
   const timeout=new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("PDF 解析超过 60 秒。可能是扫描版、加密 PDF 或文件过大，请先用普通文本型 PDF 测试。")),60000));
   const pdf=await Promise.race([loadingTask.promise,timeout]);
   const chunks:string[]=[];
