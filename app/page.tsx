@@ -196,8 +196,8 @@ export default function Home() {
         ...s,
         sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, knowledgePointId: task.knowledgePointId, startedAt: recordedAt, endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
         tasks: s.tasks.some(t => t.id === task.id)
-          ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS", actualMinutes: t.actualMinutes + 25 } : t)
-          : [...s.tasks, { ...task, status: "IN_PROGRESS", actualMinutes: 25 }]
+          ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS" as const, actualMinutes: t.actualMinutes + 25 } : t)
+          : [...s.tasks, { ...task, status: "IN_PROGRESS" as const, actualMinutes: 25 }]
       };
       void refreshSupervisor(next, supervisor);
       return next;
