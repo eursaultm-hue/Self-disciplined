@@ -5,13 +5,13 @@ import { Course, DailyReview, Goal, PriorityTier, Store, Task, TaskStatus, id, t
 import { generateDailyPlan } from "../lib/planner";
 import { buildMorningBrief, stewardReply, StewardAction, StewardMemory, StewardMessage } from "../lib/steward";
 import { askGateway, defaultGatewayConfig, GatewayConfig } from "../lib/gateway";
-import { defaultSupervisorSettings, enableSupervisor, SupervisorSettings } from "../lib/supervisor";
+import { defaultSupervisorSettings, enableSupervisor, refreshSupervisor, SupervisorSettings } from "../lib/supervisor";
 import { APP_VERSION, checkForUpdate, UpdateManifest } from "../lib/update";
 import { COURSE_KNOWLEDGE_KEY } from "../lib/courseKnowledge";
 import CourseWorkspace from "./course/CourseWorkspace";
 
 const key = "personal-learning-os-store";
-const STORE_SCHEMA_VERSION = 8;
+const STORE_SCHEMA_VERSION = 9;
 const legacyKeys = ["personal-learning-os-v07","personal-learning-os-v06","personal-learning-os-v05", "personal-learning-os-v04", "personal-learning-os-v03", "personal-learning-os-v02", "personal-learning-os-v01"];
 const blank: Store = { goals: [], courses: [], tasks: [], sessions: [], reviews: [], schedule: [], availability: {} };
 const labels: Record<TaskStatus, string> = { TODO: "待开始", IN_PROGRESS: "进行中", DONE: "已完成", OVERDUE: "已逾期", SKIPPED: "已跳过", BLOCKED: "受阻", CANCELLED: "已取消" };
@@ -191,13 +191,25 @@ export default function Home() {
 
   const record25 = (task: Task) => {
     const recordedAt = new Date().toISOString();
-    update(s => ({
-      ...s,
-      sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, knowledgePointId: task.knowledgePointId, startedAt: recordedAt, endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
-      tasks: s.tasks.some(t => t.id === task.id)
-        ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS", actualMinutes: t.actualMinutes + 25 } : t)
-        : [...s.tasks, { ...task, status: "IN_PROGRESS", actualMinutes: 25 }]
-    }));
+    update(s => {
+      const next = {
+        ...s,
+        sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, knowledgePointId: task.knowledgePointId, startedAt: recordedAt, endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
+        tasks: s.tasks.some(t => t.id === task.id)
+          ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS" as const, actualMinutes: t.actualMinutes + 25 } : t)
+          : [...s.tasks, { ...task, status: "IN_PROGRESS" as const, actualMinutes: 25 }]
+      };
+      void refreshSupervisor(next, supervisor);
+      return next;
+    });
+  };
+
+  const setTaskStatus = (task: Task, status: TaskStatus) => {
+    update(s => {
+      const next = { ...s, tasks: s.tasks.map(t => t.id === task.id ? { ...t, status } : t) };
+      void refreshSupervisor(next, supervisor);
+      return next;
+    });
   };
 
   if (!ready) return <main className="shell">正在启动 AI 管家…</main>;
@@ -247,7 +259,7 @@ export default function Home() {
           const items = plan.items.filter(x => x.priorityTier === tier);
           if (!items.length) return null;
           return <div key={tier}><h3 className={`tier ${tier.toLowerCase()}`}>{tier === "MUST" ? "必须完成" : tier === "SHOULD" ? "建议完成" : "有时间再做"}</h3>
-            {items.map(task => <TaskCard key={task.id} task={task} record25={record25} />)}</div>;
+            {items.map(task => <TaskCard key={task.id} task={task} record25={record25} setTaskStatus={setTaskStatus} />)}</div>;
         })}</div> : <div className="empty">现在没有任务。我不会要求你先填完整个系统。去「我的系统」告诉我最重要的目标和课程，之后我会逐步接管。</div>}
       </div>
 
@@ -259,9 +271,9 @@ export default function Home() {
           <div className="gateway-row"><button onClick={() => { const baseUrl = gatewayDraft.trim().replace(/\/$/, ""); setGateway({ enabled: !!baseUrl, baseUrl }); }}>保存并启用</button><button className="ghost" onClick={() => { setGateway(defaultGatewayConfig); setGatewayDraft(""); }}>离线模式</button></div>
         </div>
         <div className="card permission-card">
-          <p className="eyebrow">权限中心</p><h3>让我多替你做一点</h3>
-          <p>通知权限开启后，我可以开始承担主动提醒。日历、文件、屏幕使用情况等权限会在后续版本逐步接入。</p>
-          <button onClick={requestNotification}>{notificationEnabled ? "✓ 通知已开启" : "开启通知权限"}</button><button className="ghost" onClick={async () => { const ok = await enableSupervisor(supervisor, true); setNotificationEnabled(ok); }}>发送测试通知</button>
+          <p className="eyebrow">V0.9 · 主动监督</p><h3>让我主动盯任务</h3>
+          <p>开启后，我会按今天的任务时间提醒“该开始了”，并在任务开始后再次追踪是否有执行记录。不会无限轰炸。</p>
+          <button onClick={requestNotification}>{notificationEnabled ? "✓ 监督已启动" : "启动主动监督"}</button><button className="ghost" onClick={async () => { const ok = await enableSupervisor(supervisor, true); setNotificationEnabled(ok); }}>发送测试通知</button>
         </div>
         <div className="card permission-card">
           <p className="eyebrow">V0.8 · 课程知识库</p><h3>课程知识库已独立为一级栏目</h3>
@@ -295,7 +307,7 @@ export default function Home() {
     </section>}
 
     {view === "knowledge" && <KnowledgeHubView />}
-    {view === "today" && <TodayView date={date} setDate={setDate} available={available} plan={plan} update={update} record25={record25} />}
+    {view === "today" && <TodayView date={date} setDate={setDate} available={available} plan={plan} update={update} record25={record25} setTaskStatus={setTaskStatus} />}
     {view === "data" && <DataView store={store} update={update} date={date} />}
     {view === "review" && <ReviewView date={date} plannedMinutes={plannedMinutes} actualToday={actualToday} store={store} update={update} />}
   </main>;
@@ -328,25 +340,30 @@ function applyStewardActions(store: Store, actions: StewardAction[]): Store {
   return next;
 }
 
-function TaskCard({ task, record25 }: { task: Task & { selectionReason?: string }; record25: (task: Task) => void }) {
+function TaskCard({ task, record25, setTaskStatus }: { task: Task & { selectionReason?: string }; record25: (task: Task) => void; setTaskStatus?: (task: Task, status: TaskStatus) => void }) {
   return <article className="task">
-    <div><strong>{task.title}</strong><small>{task.plannedMinutes} 分钟 · {task.selectionReason || "管家安排"}</small></div>
-    <button onClick={() => record25(task)}>记录 25 分钟</button>
+    <div><strong>{task.title}</strong><small>{task.plannedMinutes} 分钟 · {labels[task.status]} · {task.selectionReason || "管家安排"}</small></div>
+    <div className="gateway-row">
+      {task.status !== "DONE" && task.status !== "SKIPPED" && <button onClick={() => setTaskStatus?.(task, "IN_PROGRESS")}>开始</button>}
+      {task.status !== "DONE" && <button onClick={() => record25(task)}>+25 分钟</button>}
+      {task.status !== "DONE" && <button className="ghost" onClick={() => setTaskStatus?.(task, "DONE")}>完成</button>}
+      {task.status !== "SKIPPED" && task.status !== "DONE" && <button className="ghost" onClick={() => setTaskStatus?.(task, "SKIPPED")}>跳过</button>}
+    </div>
   </article>;
 }
 
-function TodayView({ date, setDate, available, plan, update, record25 }: { date: string; setDate: (v: string) => void; available: number; plan: ReturnType<typeof generateDailyPlan>; update: (fn: (old: Store) => Store) => void; record25: (task: Task) => void }) {
+function TodayView({ date, setDate, available, plan, update, record25, setTaskStatus }: { date: string; setDate: (v: string) => void; available: number; plan: ReturnType<typeof generateDailyPlan>; update: (fn: (old: Store) => Store) => void; record25: (task: Task) => void; setTaskStatus: (task: Task, status: TaskStatus) => void }) {
   return <section><div className="section-head"><div><p className="eyebrow">TODAY</p><h2>今天的执行面板</h2></div><label>日期 <input type="date" value={date} onChange={e => setDate(e.target.value)} /></label></div>
     <div className="stats"><Stat label="可用时间" value={`${available} 分钟`} /><Stat label="固定课程" value={`${plan.scheduledMinutes} 分钟`} /><Stat label="已安排" value={`${plan.items.reduce((n, t) => n + t.plannedMinutes, 0)} 分钟`} /><Stat label="剩余容量" value={`${plan.remainingMinutes} 分钟`} /></div>
     <div className="notice">计划不是命令。现实变化时，直接告诉管家，它会重新安排。</div>
-    {plan.items.map(task => <TaskCard key={task.id} task={task} record25={record25} />)}
+    {plan.items.map(task => <TaskCard key={task.id} task={task} record25={record25} setTaskStatus={setTaskStatus} />)}
   </section>;
 }
 
 function DataView({ store, update, date }: { store: Store; update: (fn: (old: Store) => Store) => void; date: string }) {
   const addGoal = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = new FormData(e.currentTarget); const title = String(f.get("title") || "").trim(); if (!title) return; update(s => ({ ...s, goals: [...s.goals, { id: id(), title, priority: Number(f.get("priority") || 3), targetDate: String(f.get("targetDate") || "") || undefined }] })); e.currentTarget.reset(); };
   const addCourse = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = new FormData(e.currentTarget); const title = String(f.get("title") || "").trim(); if (!title) return; update(s => ({ ...s, courses: [...s.courses, { id: id(), title, goalId: String(f.get("goalId") || "") || undefined, priority: Number(f.get("priority") || 3), weeklyTargetMinutes: Number(f.get("minutes") || 180) }] })); e.currentTarget.reset(); };
-  const addTask = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = new FormData(e.currentTarget); const title = String(f.get("title") || "").trim(); if (!title) return; update(s => ({ ...s, tasks: [...s.tasks, { id: id(), title, courseId: String(f.get("courseId") || "") || undefined, goalId: String(f.get("goalId") || "") || undefined, priorityTier: String(f.get("tier")) as PriorityTier, status: "TODO", plannedDate: date, dueDate: String(f.get("dueDate") || "") || undefined, plannedMinutes: Number(f.get("minutes") || 30), actualMinutes: 0 }] })); e.currentTarget.reset(); };
+  const addTask = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = new FormData(e.currentTarget); const title = String(f.get("title") || "").trim(); if (!title) return; update(s => ({ ...s, tasks: [...s.tasks, { id: id(), title, courseId: String(f.get("courseId") || "") || undefined, goalId: String(f.get("goalId") || "") || undefined, priorityTier: String(f.get("tier")) as PriorityTier, status: "TODO", plannedDate: date, plannedStartTime: String(f.get("startTime") || "") || undefined, dueDate: String(f.get("dueDate") || "") || undefined, plannedMinutes: Number(f.get("minutes") || 30), actualMinutes: 0 }] })); e.currentTarget.reset(); };
   return <section className="two">
     <div><p className="eyebrow">LOW INPUT</p><h2>我的系统</h2><p className="hint">这里只保留 AI 暂时还无法从现实中自动获取的信息。以后会继续减少手动输入。</p>
       <div className="card"><h3>长期目标</h3>{store.goals.map(g => <p key={g.id}><b>{g.title}</b><br/><small>优先级 {g.priority} · {g.targetDate || "无截止日期"}</small></p>)}{!store.goals.length && <Empty text="例如：2027 年 IELTS 7.0、法国研究生申请。" />}</div>
@@ -355,7 +372,7 @@ function DataView({ store, update, date }: { store: Store; update: (fn: (old: St
     <div>
       <form className="card form" onSubmit={addGoal}><h3>只需要第一次告诉我目标</h3><input name="title" placeholder="例如：2027 年 IELTS 7.0" required/><label>优先级 <input name="priority" type="number" min="1" max="5" defaultValue="5"/></label><label>目标日期 <input name="targetDate" type="date"/></label><button>交给管家</button></form>
       <form className="card form" onSubmit={addCourse}><h3>课程</h3><input name="title" placeholder="例如：数学分析" required/><label>每周目标分钟 <input name="minutes" type="number" defaultValue="180"/></label><label>优先级 <input name="priority" type="number" min="1" max="5" defaultValue="4"/></label><button>保存课程</button></form>
-      <form className="card form" onSubmit={addTask}><h3>只有 AI 不知道的任务才需要手动加</h3><input name="title" placeholder="例如：完成集合与映射习题" required/><select name="tier"><option>MUST</option><option>SHOULD</option><option>COULD</option></select><select name="courseId"><option value="">不关联课程</option>{store.courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}</select><label>分钟 <input name="minutes" type="number" min="5" defaultValue="30"/></label><button>加入任务池</button></form>
+      <form className="card form" onSubmit={addTask}><h3>只有 AI 不知道的任务才需要手动加</h3><input name="title" placeholder="例如：完成集合与映射习题" required/><select name="tier"><option>MUST</option><option>SHOULD</option><option>COULD</option></select><select name="courseId"><option value="">不关联课程</option>{store.courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}</select><label>开始时间 <input name="startTime" type="time"/></label><label>分钟 <input name="minutes" type="number" min="5" defaultValue="30"/></label><button>加入任务池</button></form>
     </div>
   </section>;
 }
