@@ -328,10 +328,15 @@ function applyStewardActions(store: Store, actions: StewardAction[]): Store {
   return next;
 }
 
-function TaskCard({ task, record25 }: { task: Task & { selectionReason?: string }; record25: (task: Task) => void }) {
+function TaskCard({ task, record25, setTaskStatus }: { task: Task & { selectionReason?: string }; record25: (task: Task) => void; setTaskStatus?: (task: Task, status: TaskStatus) => void }) {
   return <article className="task">
-    <div><strong>{task.title}</strong><small>{task.plannedMinutes} 分钟 · {task.selectionReason || "管家安排"}</small></div>
-    <button onClick={() => record25(task)}>记录 25 分钟</button>
+    <div><strong>{task.title}</strong><small>{task.plannedMinutes} 分钟 · {labels[task.status]} · {task.selectionReason || "管家安排"}</small></div>
+    <div className="gateway-row">
+      {task.status !== "DONE" && task.status !== "SKIPPED" && <button onClick={() => setTaskStatus?.(task, "IN_PROGRESS")}>开始</button>}
+      {task.status !== "DONE" && <button onClick={() => record25(task)}>+25 分钟</button>}
+      {task.status !== "DONE" && <button className="ghost" onClick={() => setTaskStatus?.(task, "DONE")}>完成</button>}
+      {task.status !== "SKIPPED" && task.status !== "DONE" && <button className="ghost" onClick={() => setTaskStatus?.(task, "SKIPPED")}>跳过</button>}
+    </div>
   </article>;
 }
 
