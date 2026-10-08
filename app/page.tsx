@@ -191,13 +191,25 @@ export default function Home() {
 
   const record25 = (task: Task) => {
     const recordedAt = new Date().toISOString();
-    update(s => ({
-      ...s,
-      sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, knowledgePointId: task.knowledgePointId, startedAt: recordedAt, endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
-      tasks: s.tasks.some(t => t.id === task.id)
-        ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS", actualMinutes: t.actualMinutes + 25 } : t)
-        : [...s.tasks, { ...task, status: "IN_PROGRESS", actualMinutes: 25 }]
-    }));
+    update(s => {
+      const next = {
+        ...s,
+        sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, knowledgePointId: task.knowledgePointId, startedAt: recordedAt, endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
+        tasks: s.tasks.some(t => t.id === task.id)
+          ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS", actualMinutes: t.actualMinutes + 25 } : t)
+          : [...s.tasks, { ...task, status: "IN_PROGRESS", actualMinutes: 25 }]
+      };
+      void refreshSupervisor(next, supervisor);
+      return next;
+    });
+  };
+
+  const setTaskStatus = (task: Task, status: TaskStatus) => {
+    update(s => {
+      const next = { ...s, tasks: s.tasks.map(t => t.id === task.id ? { ...t, status } : t) };
+      void refreshSupervisor(next, supervisor);
+      return next;
+    });
   };
 
   if (!ready) return <main className="shell">正在启动 AI 管家…</main>;
