@@ -1,10 +1,11 @@
 {
-  "version": "0.8.1",
-  "versionCode": 9,
+  "version": "0.9.0",
+  "versionCode": 10,
   "downloadUrl": "https://github.com/eursaultm-hue/Self-disciplined/releases/latest",
   "notes": [
-    "V0.8.1 知识到任务与 SRS 到计划闭环",
-    "到期复习自动进入今日计划，知识点任务去重",
-    "保留 V0.7 学习引擎、SRS 与数据备份"
+    "V0.9 主动监督核心",
+    "任务开始提醒与10分钟执行追踪",
+    "任务开始/完成/跳过与实际学习记录",
+    "保留V0.8课程知识库与SRS能力"
   ]
 }
