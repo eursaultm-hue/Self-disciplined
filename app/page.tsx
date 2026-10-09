@@ -204,10 +204,10 @@ export default function Home() {
       const startedAt = existing.startedAt || recordedAt;
       const next = {
         ...s,
-        sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, knowledgePointId: task.knowledgePointId, startedAt, endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
+        sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, knowledgePointId: task.knowledgePointId, startedAt: new Date(new Date(recordedAt).getTime() - 25 * 60000).toISOString(), endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
         tasks: s.tasks.some(t => t.id === task.id)
-          ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS" as const, startedAt, actualMinutes: t.actualMinutes + 25 } : t)
-          : [...s.tasks, { ...task, status: "IN_PROGRESS" as const, startedAt, actualMinutes: 25 }]
+          ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS" as const, startedAt: recordedAt, actualMinutes: t.actualMinutes + 25 } : t)
+          : [...s.tasks, { ...task, status: "IN_PROGRESS" as const, startedAt: recordedAt, actualMinutes: 25 }]
       };
       void refreshSupervisor(next, supervisor);
       return next;
@@ -386,7 +386,7 @@ function TodayView({ date, setDate, available, plan, update, record25, setTaskSt
   return <section><div className="section-head"><div><p className="eyebrow">TODAY</p><h2>今天的执行面板</h2></div><label>日期 <input type="date" value={date} onChange={e => setDate(e.target.value)} /></label></div>
     <div className="stats"><Stat label="可用时间" value={`${available} 分钟`} /><Stat label="固定课程" value={`${plan.scheduledMinutes} 分钟`} /><Stat label="已安排" value={`${plan.items.reduce((n, t) => n + t.plannedMinutes, 0)} 分钟`} /><Stat label="剩余容量" value={`${plan.remainingMinutes} 分钟`} /></div>
     <div className="notice">计划不是命令。现实变化时，直接告诉管家，它会重新安排。</div>
-    {plan.items.map(task => <TaskCard key={task.id} task={task} record25={record25} setTaskStatus={setTaskStatus} />)}
+    {plan.items.map(task => <TaskCard key={task.id} task={task} record25={record25} setTaskStatus={setTaskStatus} startTask={startTask} postponeTask={postponeTask} />)}
   </section>;
 }
 
