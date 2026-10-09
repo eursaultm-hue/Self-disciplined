@@ -19,9 +19,11 @@ function loadStore(): Store | null {
 function taskStartTime(task: Task, index: number) {
   const d = new Date();
   if (task.plannedStartTime) {
-    const [h,m] = task.plannedStartTime.split(":").map(Number); d.setHours(Number.isFinite(h) ? h : 9, Number.isFinite(m) ? m : 0, 0, 0);
+    const [h,m] = task.plannedStartTime.split(":").map(Number);
+    d.setHours(Number.isFinite(h) ? h : 9, Number.isFinite(m) ? m : 0, 0, 0);
   } else {
-    d.setHours(9,0,0,0); d.setMinutes(d.getMinutes() + index * Math.max(25, Number(task.plannedMinutes) || 30));
+    d.setMinutes(d.getMinutes() + 5 + index * Math.max(25, Number(task.plannedMinutes) || 30));
+    d.setSeconds(0, 0);
   }
   return d;
 }
@@ -31,15 +33,15 @@ export async function refreshSupervisor(store: Store, settings: SupervisorSettin
   await LocalNotifications.cancel({ notifications: [...Array.from({length:20},(_,i)=>({id:5100+i})), {id:5001},{id:5002},{id:5003},{id:5099}] });
   if (!settings.enabled) return true;
   const now = new Date();
-  const candidates = (store.tasks || []).filter(t => t.plannedDate === today() && ["TODO","IN_PROGRESS","OVERDUE"].includes(t.status))
+  const candidates = (store.tasks || []).filter(t => (t.plannedDate || today()) === today() && ["TODO","IN_PROGRESS","OVERDUE"].includes(t.status))
     .sort((a,b) => taskStartTime(a,0).getTime() - taskStartTime(b,0).getTime())
     .slice(0, Math.max(1, Math.floor(settings.maxPerDay / 2)));
   const notifications: any[] = [];
   candidates.forEach((task,index) => {
     const start = taskStartTime(task,index);
-    if (start > now && !inQuietHours(start.getHours(),settings)) notifications.push({id:notificationId(index),title:"该开始了 · 自律 AI 管家",body:task.title+" · 计划 "+task.plannedMinutes+" 分钟。打开 App 记录开始。",schedule:{at:start}});
+    if (task.status === "TODO" && start > now && !inQuietHours(start.getHours(),settings)) notifications.push({id:notificationId(index),title:"该开始了 · 自律 AI 管家",body:task.title+" · 计划 "+task.plannedMinutes+" 分钟。打开 App 记录开始。",schedule:{at:start}});
     const follow = new Date(start.getTime()+10*60000);
-    if (follow > now && !inQuietHours(follow.getHours(),settings)) notifications.push({id:notificationId(index,true),title:"执行检查 · 自律 AI 管家",body:task.title+" 已开始 10 分钟。如果还没开始，点进 App 更新现实状态。",schedule:{at:follow}});
+    if (task.status === "IN_PROGRESS" && follow > now && !inQuietHours(follow.getHours(),settings)) notifications.push({id:notificationId(index,true),title:"执行检查 · 自律 AI 管家",body:task.title+" 已记录为进行中。回到 App 更新实际进度，避免任务状态失真。",schedule:{at:follow}});
   });
   const evening = new Date(); evening.setHours(20,30,0,0); if (evening <= now) evening.setDate(evening.getDate()+1);
   if (!inQuietHours(evening.getHours(),settings)) notifications.push({id:5002,title:"今日执行复盘",body:"看看今天完成了多少。没完成的任务不要装死，重新安排。",schedule:{at:evening}});

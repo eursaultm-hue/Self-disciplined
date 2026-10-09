@@ -11,7 +11,7 @@ import { COURSE_KNOWLEDGE_KEY } from "../lib/courseKnowledge";
 import CourseWorkspace from "./course/CourseWorkspace";
 
 const key = "personal-learning-os-store";
-const STORE_SCHEMA_VERSION = 9;
+const STORE_SCHEMA_VERSION = 10
 const legacyKeys = ["personal-learning-os-v07","personal-learning-os-v06","personal-learning-os-v05", "personal-learning-os-v04", "personal-learning-os-v03", "personal-learning-os-v02", "personal-learning-os-v01"];
 const blank: Store = { goals: [], courses: [], tasks: [], sessions: [], reviews: [], schedule: [], availability: {} };
 const labels: Record<TaskStatus, string> = { TODO: "待开始", IN_PROGRESS: "进行中", DONE: "已完成", OVERDUE: "已逾期", SKIPPED: "已跳过", BLOCKED: "受阻", CANCELLED: "已取消" };
@@ -189,24 +189,54 @@ export default function Home() {
     if (ok) setSupervisor(s => ({ ...s, enabled: true }));
   };
 
+  const startTask = (task: Task) => {
+    const startedAt = new Date().toISOString();
+    update(s => {
+      const next = { ...s, tasks: s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS" as const, startedAt: t.startedAt || startedAt } : t) };
+      void refreshSupervisor(next, supervisor);
+      return next;
+    });
+  };
   const record25 = (task: Task) => {
     const recordedAt = new Date().toISOString();
     update(s => {
+      const existing = s.tasks.find(t => t.id === task.id) || task;
+      const startedAt = existing.startedAt || recordedAt;
       const next = {
         ...s,
-        sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, knowledgePointId: task.knowledgePointId, startedAt: recordedAt, endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
+        sessions: [...s.sessions, { id: id(), taskId: task.id, courseId: task.courseId, knowledgePointId: task.knowledgePointId, startedAt: new Date(new Date(recordedAt).getTime() - 25 * 60000).toISOString(), endedAt: recordedAt, actualMinutes: 25, note: "专注学习" }],
         tasks: s.tasks.some(t => t.id === task.id)
-          ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS" as const, actualMinutes: t.actualMinutes + 25 } : t)
-          : [...s.tasks, { ...task, status: "IN_PROGRESS" as const, actualMinutes: 25 }]
+          ? s.tasks.map(t => t.id === task.id ? { ...t, status: "IN_PROGRESS" as const, startedAt: recordedAt, actualMinutes: t.actualMinutes + 25 } : t)
+          : [...s.tasks, { ...task, status: "IN_PROGRESS" as const, startedAt: recordedAt, actualMinutes: 25 }]
       };
       void refreshSupervisor(next, supervisor);
       return next;
     });
   };
-
+  const postponeTask = (task: Task, minutes: number) => {
+    const start = new Date(Date.now() + minutes * 60000);
+    const plannedStartTime = start.toTimeString().slice(0, 5);
+    const localDate = new Date(start.getTime() - start.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    update(s => {
+      const next = { ...s, tasks: s.tasks.map(t => t.id === task.id ? { ...t, status: "TODO" as const, plannedDate: localDate, plannedStartTime, startedAt: undefined } : t) };
+      void refreshSupervisor(next, supervisor);
+      return next;
+    });
+  };
   const setTaskStatus = (task: Task, status: TaskStatus) => {
     update(s => {
-      const next = { ...s, tasks: s.tasks.map(t => t.id === task.id ? { ...t, status } : t) };
+      const now = new Date();
+      const current = s.tasks.find(t => t.id === task.id) || task;
+      let sessions = s.sessions;
+      let startedAt = current.startedAt;
+      let actualMinutes = current.actualMinutes;
+      if (status === "IN_PROGRESS") startedAt = startedAt || now.toISOString();
+      if (status === "DONE" && startedAt) {
+        const elapsed = Math.max(1, Math.round((now.getTime() - new Date(startedAt).getTime()) / 60000));
+        actualMinutes += elapsed;
+        sessions = [...sessions, { id: id(), taskId: current.id, courseId: current.courseId, knowledgePointId: current.knowledgePointId, startedAt, endedAt: now.toISOString(), actualMinutes: elapsed, note: "任务完成记录" }];
+      }
+      const next = { ...s, sessions, tasks: s.tasks.map(t => t.id === task.id ? { ...t, status, startedAt: status === "DONE" ? undefined : startedAt, actualMinutes } : t) };
       void refreshSupervisor(next, supervisor);
       return next;
     });
@@ -259,7 +289,7 @@ export default function Home() {
           const items = plan.items.filter(x => x.priorityTier === tier);
           if (!items.length) return null;
           return <div key={tier}><h3 className={`tier ${tier.toLowerCase()}`}>{tier === "MUST" ? "必须完成" : tier === "SHOULD" ? "建议完成" : "有时间再做"}</h3>
-            {items.map(task => <TaskCard key={task.id} task={task} record25={record25} setTaskStatus={setTaskStatus} />)}</div>;
+            {items.map(task => <TaskCard key={task.id} task={task} record25={record25} setTaskStatus={setTaskStatus} startTask={startTask} postponeTask={postponeTask} />)}</div>;
         })}</div> : <div className="empty">现在没有任务。我不会要求你先填完整个系统。去「我的系统」告诉我最重要的目标和课程，之后我会逐步接管。</div>}
       </div>
 
@@ -307,7 +337,7 @@ export default function Home() {
     </section>}
 
     {view === "knowledge" && <KnowledgeHubView />}
-    {view === "today" && <TodayView date={date} setDate={setDate} available={available} plan={plan} update={update} record25={record25} setTaskStatus={setTaskStatus} />}
+    {view === "today" && <TodayView date={date} setDate={setDate} available={available} plan={plan} update={update} record25={record25} setTaskStatus={setTaskStatus} startTask={startTask} postponeTask={postponeTask} />}
     {view === "data" && <DataView store={store} update={update} date={date} />}
     {view === "review" && <ReviewView date={date} plannedMinutes={plannedMinutes} actualToday={actualToday} store={store} update={update} />}
   </main>;
@@ -340,23 +370,23 @@ function applyStewardActions(store: Store, actions: StewardAction[]): Store {
   return next;
 }
 
-function TaskCard({ task, record25, setTaskStatus }: { task: Task & { selectionReason?: string }; record25: (task: Task) => void; setTaskStatus?: (task: Task, status: TaskStatus) => void }) {
+function TaskCard({ task, record25, setTaskStatus, startTask, postponeTask }: { task: Task & { selectionReason?: string }; record25: (task: Task) => void; setTaskStatus?: (task: Task, status: TaskStatus) => void; startTask?: (task: Task) => void; postponeTask?: (task: Task, minutes: number) => void }) {
   return <article className="task">
     <div><strong>{task.title}</strong><small>{task.plannedMinutes} 分钟 · {labels[task.status]} · {task.selectionReason || "管家安排"}</small></div>
     <div className="gateway-row">
-      {task.status !== "DONE" && task.status !== "SKIPPED" && <button onClick={() => setTaskStatus?.(task, "IN_PROGRESS")}>开始</button>}
+      {task.status !== "DONE" && task.status !== "SKIPPED" && <button onClick={() => startTask ? startTask(task) : setTaskStatus?.(task, "IN_PROGRESS")}>开始</button>}
       {task.status !== "DONE" && <button onClick={() => record25(task)}>+25 分钟</button>}
       {task.status !== "DONE" && <button className="ghost" onClick={() => setTaskStatus?.(task, "DONE")}>完成</button>}
-      {task.status !== "SKIPPED" && task.status !== "DONE" && <button className="ghost" onClick={() => setTaskStatus?.(task, "SKIPPED")}>跳过</button>}
+      {task.status !== "SKIPPED" && task.status !== "DONE" && <><button className="ghost" onClick={() => postponeTask?.(task, 15)}>推迟15分钟</button><button className="ghost" onClick={() => postponeTask?.(task, 30)}>推迟30分钟</button><button className="ghost" onClick={() => setTaskStatus?.(task, "SKIPPED")}>跳过</button></>}
     </div>
   </article>;
 }
 
-function TodayView({ date, setDate, available, plan, update, record25, setTaskStatus }: { date: string; setDate: (v: string) => void; available: number; plan: ReturnType<typeof generateDailyPlan>; update: (fn: (old: Store) => Store) => void; record25: (task: Task) => void; setTaskStatus: (task: Task, status: TaskStatus) => void }) {
+function TodayView({ date, setDate, available, plan, update, record25, setTaskStatus, startTask, postponeTask }: { date: string; setDate: (v: string) => void; available: number; plan: ReturnType<typeof generateDailyPlan>; update: (fn: (old: Store) => Store) => void; record25: (task: Task) => void; setTaskStatus: (task: Task, status: TaskStatus) => void; startTask: (task: Task) => void; postponeTask: (task: Task, minutes: number) => void }) {
   return <section><div className="section-head"><div><p className="eyebrow">TODAY</p><h2>今天的执行面板</h2></div><label>日期 <input type="date" value={date} onChange={e => setDate(e.target.value)} /></label></div>
     <div className="stats"><Stat label="可用时间" value={`${available} 分钟`} /><Stat label="固定课程" value={`${plan.scheduledMinutes} 分钟`} /><Stat label="已安排" value={`${plan.items.reduce((n, t) => n + t.plannedMinutes, 0)} 分钟`} /><Stat label="剩余容量" value={`${plan.remainingMinutes} 分钟`} /></div>
     <div className="notice">计划不是命令。现实变化时，直接告诉管家，它会重新安排。</div>
-    {plan.items.map(task => <TaskCard key={task.id} task={task} record25={record25} setTaskStatus={setTaskStatus} />)}
+    {plan.items.map(task => <TaskCard key={task.id} task={task} record25={record25} setTaskStatus={setTaskStatus} startTask={startTask} postponeTask={postponeTask} />)}
   </section>;
 }
 

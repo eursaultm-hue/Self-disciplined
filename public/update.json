@@ -1,11 +1,11 @@
 {
-  "version": "0.9.0",
-  "versionCode": 10,
+  "version": "0.9.1",
+  "versionCode": 11,
   "downloadUrl": "https://github.com/eursaultm-hue/Self-disciplined/releases/latest",
   "notes": [
-    "V0.9 主动监督核心",
-    "任务开始提醒与10分钟执行追踪",
-    "任务开始/完成/跳过与实际学习记录",
-    "保留V0.8课程知识库与SRS能力"
+    "V0.9.1 执行反馈闭环",
+    "支持推迟15/30分钟",
+    "开始任务时记录时间，完成时记录实际耗时",
+    "修复任务开始时间与通知逻辑"
   ]
 }
