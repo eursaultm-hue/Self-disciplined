@@ -40,7 +40,7 @@ export async function refreshSupervisor(store: Store, settings: SupervisorSettin
   candidates.forEach((task,index) => {
     const start = taskStartTime(task,index);
     if (task.status === "TODO" && start > now && !inQuietHours(start.getHours(),settings)) notifications.push({id:notificationId(index),title:"该开始了 · 自律 AI 管家",body:task.title+" · 计划 "+task.plannedMinutes+" 分钟。打开 App 记录开始。",schedule:{at:start}});
-    const follow = new Date(start.getTime()+10*60000);
+    const follow = new Date(task.startedAt ? new Date(task.startedAt).getTime() + 10 * 60000 : start.getTime() + 10 * 60000);
     if (task.status === "IN_PROGRESS" && follow > now && !inQuietHours(follow.getHours(),settings)) notifications.push({id:notificationId(index,true),title:"执行检查 · 自律 AI 管家",body:task.title+" 已记录为进行中。回到 App 更新实际进度，避免任务状态失真。",schedule:{at:follow}});
   });
   const evening = new Date(); evening.setHours(20,30,0,0); if (evening <= now) evening.setDate(evening.getDate()+1);
