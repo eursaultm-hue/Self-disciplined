@@ -1,11 +1,11 @@
 {
-  "version": "0.9.1",
-  "versionCode": 11,
+  "version": "0.9.2",
+  "versionCode": 9002,
   "downloadUrl": "https://github.com/eursaultm-hue/Self-disciplined/releases/latest",
   "notes": [
-    "V0.9.1 执行反馈闭环",
-    "支持推迟15/30分钟",
-    "开始任务时记录时间，完成时记录实际耗时",
-    "修复任务开始时间与通知逻辑"
+    "V0.9.2 执行监督闭环",
+    "自动识别并标记过期未完成任务",
+    "复盘页显示任务完成率、逾期任务与实际记录时长",
+    "修正 APK 版本号、产物名称和 Release 标签"
   ]
 }
