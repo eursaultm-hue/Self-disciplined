@@ -8,6 +8,7 @@ import { askGateway, defaultGatewayConfig, GatewayConfig } from "../lib/gateway"
 import { defaultSupervisorSettings, enableSupervisor, refreshSupervisor, SupervisorSettings } from "../lib/supervisor";
 import { APP_VERSION, checkForUpdate, UpdateManifest } from "../lib/update";
 import { COURSE_KNOWLEDGE_KEY } from "../lib/courseKnowledge";
+import { buildExecutionSummary, reconcileOverdueTasks } from "../lib/execution";
 import CourseWorkspace from "./course/CourseWorkspace";
 
 const key = "personal-learning-os-store";
@@ -74,7 +75,7 @@ export default function Home() {
   const [backupBusy, setBackupBusy] = useState(false);
 
   useEffect(() => {
-    const initial = load();
+    const initial = reconcileOverdueTasks(load(), today());
     setStore(initial);
     if (hasStoreData(initial) && !hasStoreData(readStore(localStorage.getItem(key)) || blank)) {
       setMigrationNotice("已自动从旧版本恢复你的数据。");
@@ -247,7 +248,7 @@ export default function Home() {
   return <main className="shell">
     <header className="topbar">
       <div>
-        <p className="eyebrow">PERSONAL LEARNING OS · V0.8</p>
+        <p className="eyebrow">PERSONAL LEARNING OS · V0.9.2</p>
         <h1>自律 <span>AI 管家</span></h1>
         <p className="sub">你负责告诉我现实发生了什么，我负责把它变成可执行的下一步。</p>
       </div>
@@ -407,9 +408,10 @@ function DataView({ store, update, date }: { store: Store; update: (fn: (old: St
   </section>;
 }
 
-function ReviewView({ date, plannedMinutes, actualToday, store, update }: { date: string; plannedMinutes: number; actualToday: number; store: Store; update: (fn: (old: Store) => Store) => void }) {  const save = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = new FormData(e.currentTarget); const review: DailyReview = { date, wins: String(f.get("wins") || ""), blockers: String(f.get("blockers") || ""), reflection: String(f.get("reflection") || ""), tomorrowAdjustment: String(f.get("adjustment") || ""), energyLevel: Number(f.get("energy") || 3) }; update(s => ({ ...s, reviews: [...s.reviews.filter(r => r.date !== date), review] })); };
-  return <section className="two"><div><p className="eyebrow">REVIEW</p><h2>今天结束时，告诉管家现实。</h2><div className="stats"><Stat label="计划" value={`${plannedMinutes} 分钟`} /><Stat label="实际" value={`${actualToday} 分钟`} /></div><div className="notice">以后这里会由 AI 主动追问。现在保留一个极短的兜底入口，避免系统假装自己知道你发生了什么。</div><p className="hint">历史复盘：{store.reviews.length} 天</p></div><form className="card form" onSubmit={save}><textarea name="wins" placeholder="今天发生了什么？"/><textarea name="blockers" placeholder="哪里卡住了？"/><label>精力 1–5 <input name="energy" type="number" min="1" max="5" defaultValue="3"/></label><textarea name="adjustment" placeholder="明天有什么变化？"/><button>让管家记住</button></form></section>;
+function ReviewView({ date, plannedMinutes, actualToday, store, update }: { date: string; plannedMinutes: number; actualToday: number; store: Store; update: (fn: (old: Store) => Store) => void }) {
+  const summary = buildExecutionSummary(store.tasks, store.sessions, date);
+  const save = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = new FormData(e.currentTarget); const review: DailyReview = { date, wins: String(f.get("wins") || ""), blockers: String(f.get("blockers") || ""), reflection: String(f.get("reflection") || ""), tomorrowAdjustment: String(f.get("adjustment") || ""), energyLevel: Number(f.get("energy") || 3) }; update(s => ({ ...s, reviews: [...s.reviews.filter(r => r.date !== date), review] })); };
+  return <section className="two"><div><p className="eyebrow">REVIEW · EXECUTION DATA</p><h2>今天结束时，先看实际执行，再做复盘。</h2><div className="stats"><Stat label="计划任务" value={`${summary.plannedCount} 项`} /><Stat label="已完成" value={`${summary.completedCount} 项`} /><Stat label="完成率" value={`${summary.completionRate}%`} /><Stat label="实际学习" value={`${actualToday} 分钟`} /></div><div className="stats"><Stat label="计划时长" value={`${summary.plannedMinutes} 分钟`} /><Stat label="逾期未完成" value={`${summary.overdueCount} 项`} /><Stat label="已推迟到以后" value={`${summary.deferredCount} 项`} /><Stat label="跳过" value={`${summary.skippedCount} 项`} /></div><div className="notice">统计来自你在 App 中记录的任务和学习时段。没有点击开始或记录时长的学习不会被系统擅自算成已完成。</div><p className="hint">历史复盘：{store.reviews.length} 天 · 计划总览 {plannedMinutes} 分钟 · 已记录学习 {actualToday} 分钟</p></div><form className="card form" onSubmit={save}><textarea name="wins" placeholder="今天真正完成了什么？"/><textarea name="blockers" placeholder="哪些任务没完成，原因是什么？"/><textarea name="reflection" placeholder="今天有什么规律或教训？"/><label>精力 1–5 <input name="energy" type="number" min="1" max="5" defaultValue="3"/></label><textarea name="adjustment" placeholder="明天需要怎么调整？"/><button>保存今日复盘</button></form></section>;
 }
-
 function Stat({ label, value }: { label: string; value: string }) { return <div className="stat"><small>{label}</small><strong>{value}</strong></div>; }
 function Empty({ text }: { text: string }) { return <p className="empty">{text}</p>; }
