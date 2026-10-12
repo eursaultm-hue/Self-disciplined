@@ -37,7 +37,7 @@ export function generateDailyPlan({ date, availableMinutes, tasks, goals, course
   };
   const candidates = candidatesInput.filter((task, index, all) => ["TODO", "IN_PROGRESS", "SKIPPED", "OVERDUE"].includes(task.status) && (!task.plannedDate || task.plannedDate <= date) && Number.isFinite(task.plannedMinutes) && task.plannedMinutes > 0 && all.findIndex(x => x.id === task.id) === index)
     .map((task) => {
-      const isOverdue = task.status === "OVERDUE" || (!!task.dueDate && task.dueDate < date);
+      const isOverdue = task.status === "OVERDUE" || (!!task.plannedDate && task.plannedDate < date) || (!!task.dueDate && task.dueDate < date);
       const isReview = !!task.knowledgePointId && reviewTasks.some(x => x.id === task.id);
       return { ...task, status: isOverdue ? "OVERDUE" as const : task.status, score: score(task), selectionReason: isReview ? "SRS 到期复习" : isOverdue ? "已逾期，优先处理" : task.priorityTier + " 优先级任务" };
     })
