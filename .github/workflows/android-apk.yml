@@ -47,38 +47,37 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Set Android version
-        working-directory: android
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path("app/build.gradle")
-          s = p.read_text()
-          s = s.replace("versionCode 1", "versionCode 9").replace('versionName "1.0"', 'versionName "0.8.1"')
-          p.write_text(s)
-          PY
+      - name: Set Android version from package.json
+        run: node scripts/set-android-version.mjs
 
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug
 
-      - name: Prepare APK artifact
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk self-disciplined-v0.8.1.apk
+      - name: Prepare versioned APK artifact
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "self-disciplined-v${VERSION}.apk"
+          echo "APK_NAME=self-disciplined-v${VERSION}.apk" >> "$GITHUB_ENV"
+          echo "APP_VERSION=${VERSION}" >> "$GITHUB_ENV"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: self-disciplined-apk-v0.8.1
-          path: self-disciplined-v0.8.1.apk
+          name: self-disciplined-apk-v${{ env.APP_VERSION }}
+          path: ${{ env.APK_NAME }}
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Publish GitHub release
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v0.8.1"
+          TAG="v${APP_VERSION}"
+          NOTES="自律ROBOT ${TAG}：逾期任务识别、执行复盘和版本化 APK 构建。"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" self-disciplined-v0.8.1.apk --title "自律ROBOT V0.8.1" --notes "V0.8.1 知识点、SRS、任务与今日计划闭环。"
+            gh release create "$TAG" "$APK_NAME" --title "自律ROBOT ${TAG}" --notes "$NOTES"
           else
-            gh release upload "$TAG" self-disciplined-v0.8.1.apk --clobber
+            gh release upload "$TAG" "$APK_NAME" --clobber
           fi
